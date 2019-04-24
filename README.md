@@ -1,5 +1,25 @@
 # DeepZip
 
+## Floating point time series compression
+To set up virtual environment and dependencies:
+```
+sudo apt-get install p7zip-full
+cd src/
+python3 -m venv env
+source env/bin/activate
+./install.sh
+```
+
+### Relevant scripts
+The instructions for each script are available in the help for the corresponding file.
+1. data/dat_to_np.py: convert a .dat file (with 1 time series value in plaintext per line) to .npy file
+2. src/models.py: neural network models in the form of functions
+3. src/nlms_compress.py: compression and decompression using the NLMS prediction setup
+4. src/nn_trainer.py: train neural networks
+5. src/nn_compress.py: compress/decompress using trained NN models
+
+
+## ----- OLD ------
 ## Description
 DNA_compression using neural networks
 
