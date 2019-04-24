@@ -18,6 +18,8 @@ import os
 from keras.callbacks import CSVLogger
 from keras import backend as K
 
+tf.set_random_seed(42)
+np.random.seed(0)
 
 def biGRU(bs,time_steps,alphabet_size):
         model = Sequential()

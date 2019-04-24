@@ -1,34 +1,81 @@
-import numpy as np
-import struct
-import padasip as pa
-import os
-import subprocess
-import argparse
-import numpy as np
+#
+# Compression application using adaptive arithmetic coding
+#
+# Usage: python adaptive-arithmetic-compress.py InputFile OutputFile
+# Then use the corresponding adaptive-arithmetic-decompress.py application to recreate the original input file.
+# Note that the application starts with a flat frequency table of 257 symbols (all set to a frequency of 1),
+# and updates it after each byte encoded. The corresponding decompressor program also starts with a flat
+# frequency table and updates it after each byte decoded. It is by design that the compressor and
+# decompressor have synchronized states, so that the data can be decompressed properly.
+#
+# Copyright (c) Project Nayuki
+#
+# https://www.nayuki.io/page/reference-arithmetic-coding
+# https://github.com/nayuki/Reference-arithmetic-coding
+#
 
-class NLMS_predictor:        
-    def init(self, n):
-        self.filt = pa.filters.FilterNLMS(n, mu=1.,w="zeros")
-        self.n = n
-        return
-    def predict(self,past,idx):
-        if(idx==0):
-            return 0
-        elif(idx<=self.n):
-            return past[idx-1]
-        else:
-            self.filt.adapt(past[idx-1],past[idx-self.n-1:idx-1])
-            return self.filt.predict(past[idx-self.n:idx])
+from numpy.random import seed
+seed(1)
+from tensorflow import set_random_seed
+set_random_seed(2)
+
+from sklearn.metrics import mean_squared_error
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import OneHotEncoder
+import keras
+from keras.models import Sequential
+from keras.models import model_from_json
+from keras.models import load_model
+from keras.layers.normalization import BatchNormalization
+import tensorflow as tf
+import numpy as np
+import argparse
+import contextlib
+import json
+import struct
+import models
+import tempfile
+import shutil
+import subprocess
+import os
 
 parser = argparse.ArgumentParser(description='Input')
 parser.add_argument('-mode', action='store', dest='mode',
-                    help='c or d (compress/decompress)', required=True)
+        help='c or d (compress/decompress)', required=True)
 parser.add_argument('-infile', action='store', dest='infile', help = 'infile .npy/.7z', type = str, required=True)
 parser.add_argument('-outfile', action='store', dest='outfile', help = 'outfile .npy/.7z', type = str, required=True)
-parser.add_argument('-n', action='store', dest='n', help = 'order of NLMS filter for compression (default 4)', type = int, default = 4)
 parser.add_argument('-maxerror', action='store', dest='maxerror', help = 'max allowed error for compression', type=float)
+parser.add_argument('-model_file', action='store', dest='model_file',
+                    help='model file', required=True)
+parser.add_argument('-model_update_period', action='store', dest='model_update_period', help = 'train model (both during compression & decompression) after seeing these many symbols (default: never train)', type = int)
+parser.add_argument('-lr', action='store', type=float,
+	dest='lr', default = 1e-3,
+	help='learning rate for Adam')
+parser.add_argument('-epochs', action='store',
+	dest='num_epochs', type = int, default = 1,
+	help='number of epochs to train')
 
 args = parser.parse_args()
+from keras import backend as K
+
+def strided_app(a, L, S):  # Window len = L, Stride len/stepsize = S
+    nrows = ((a.size - L) // S) + 1
+    n = a.strides[0]
+    return np.lib.stride_tricks.as_strided(
+        a, shape=(nrows, L), strides=(S * n, n), writeable=False)
+
+def generate_data(series, time_steps):
+    series = series.reshape(-1, 1)
+    series = series.reshape(-1)
+    data = strided_app(series, time_steps+1, 1)
+    X = data[:, :-1]
+    Y = data[:, -1:]
+    return X,Y
+
+model = load_model(args.model_file)
+window_size = model.layers[0].input_shape[1]
+print('window_size',window_size)
+K.set_value(model.optimizer.lr, args.lr)
 
 if args.mode == 'c':
     if args.maxerror == None:
@@ -47,19 +94,22 @@ if args.mode == 'c':
     fmtstring = 'H' # 16 bit unsigned
     bin_idx_len = 2 # in bytes
 
-    # initialize predictor
-    predictor = NLMS_predictor()
-    predictor.init(args.n)
     reconstruction = np.zeros(np.shape(data),dtype=np.uint32)
     f_out = open(tmpfile,'wb')
     # write max error to file (needed during decompression)
     f_out.write(struct.pack('f',maxerror))
     # write length of array to file
     f_out.write(struct.pack('I',len(data)))
-    # write n to file
-    f_out.write(struct.pack('I',args.n))
     for i in range(len(data)):
-        predval = np.float32(predictor.predict(reconstruction,i))
+        if i <= window_size:
+            predval = np.float32(0.0)
+        else:
+            if args.model_update_period != None:
+                assert args.model_update_period > window_size+1
+                if i%args.model_update_period == 0:
+                    X_train, Y_train = generate_data(reconstruction[i-args.model_update_period:i-1], window_size)
+                    model.fit(X_train, Y_train, epochs=args.num_epochs, verbose=1)
+            predval = reconstruction[i-1] + np.float32(model.predict(np.reshape(reconstruction[i-window_size-1:i-1],(1,-1)))[0][0])
         diff = np.float32(data[i] - predval)
         if (diff > maxlevel + maxerror or diff < minlevel - maxerror):
             f_out.write(struct.pack(fmtstring,numbins))
@@ -82,11 +132,11 @@ if args.mode == 'c':
     os.remove(tmpfile)
     # save reconstruction to a file (for comparing later)
     np.save(reconfile,reconstruction)
+
     # compute the maximum error b/w reconstrution and data and check that it is within maxerror
     maxerror_observed = np.max(np.abs(data-reconstruction))
     print('maxerror_observed',maxerror_observed)
     assert maxerror_observed <= maxerror
-
     print('Length of time series: ', len(data))
     print('Size of compressed file: ',os.path.getsize(args.outfile), 'bytes')
     print('Reconstruction written to: ',reconfile)
@@ -99,8 +149,6 @@ elif args.mode == 'd':
     maxerror = np.float32(struct.unpack('f',f_in.read(4))[0])
     # read length of data
     len_data = struct.unpack('I',f_in.read(4))[0]
-    # read n from file
-    n_nlms = struct.unpack('I',f_in.read(4))[0]
     # initialize quantization (with roughly 65535 bins at the start)
     maxlevel = np.float32(65533*maxerror)
     minlevel = np.float32(-65533*maxerror)
@@ -108,12 +156,17 @@ elif args.mode == 'd':
     bins = np.linspace(minlevel,maxlevel,numbins,dtype=np.float32)
     fmtstring = 'H' # 16 bit unsigned
     bin_idx_len = 2 # in bytes
-    # initialize predictor
-    predictor = NLMS_predictor()
-    predictor.init(n_nlms)
     reconstruction = np.zeros(len_data,dtype=np.uint32)
     for i in range(len_data):
-        predval = np.float32(predictor.predict(reconstruction,i))
+        if i <= window_size:
+            predval = np.float32(0.0)
+        else:
+            if args.model_update_period != None:
+                assert args.model_update_period > window_size+1
+                if i%args.model_update_period == 0:
+                    X_train, Y_train = generate_data(reconstruction[i-args.model_update_period:i-1], window_size)
+                    model.fit(X_train, Y_train, epochs=args.num_epochs, verbose=1)
+            predval = reconstruction[i-1] + np.float32(model.predict(np.reshape(reconstruction[i-window_size-1:i-1],(1,-1)))[0][0])
         bin_idx = struct.unpack(fmtstring,f_in.read(bin_idx_len))[0]
         if bin_idx == numbins:
             reconstruction[i] = np.float32(struct.unpack('f',f_in.read(4))[0])

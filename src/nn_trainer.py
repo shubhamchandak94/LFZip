@@ -21,19 +21,28 @@ np.random.seed(0)
 parser = argparse.ArgumentParser()
 parser.add_argument('-train', action='store', default=None,
                     dest='train',
-                    help='choose training sequence file')
+                    help='choose training sequence file',required=True)
 parser.add_argument('-val', action='store', default=None,
                     dest='val',
-                    help='choose validation sequence file')
-parser.add_argument('-name', action='store', default="model1",
-                    dest='name',
+                    help='choose validation sequence file',required=True)
+parser.add_argument('-model_file', action='store', default="modelfile",
+                    dest='model_file',
                     help='weights will be stored with this name')
 parser.add_argument('-model_name', action='store', default=None,
                     dest='model_name',
-                    help='name of the model to call')
+                    help='name of the model to call',required=True)
 parser.add_argument('-log_file', action='store',
-                    dest='log_file',
+                    dest='log_file', default = "log_file",
                     help='Log file')
+parser.add_argument('-lr', action='store', type=float,
+                    dest='lr', default = 1e-3,
+                    help='learning rate for Adam')
+parser.add_argument('-noise', action='store', type=float,
+                    dest='noise', default = 0.0,
+                    help='amount of noise added to X (Unif[-noise,noise])')
+parser.add_argument('-epochs', action='store',
+                    dest='num_epochs', type = int, default = 20,
+                    help='number of epochs to train (if 0, just store initial model))')
 
 def strided_app(a, L, S):  # Window len = L, Stride len/stepsize = S
         nrows = ((a.size - L) // S) + 1
@@ -56,8 +65,12 @@ def generate_data(file_path,time_steps):
 
         
 def fit_model(X_train, Y_train, X_val, Y_val, nb_epoch, model):
-        model.compile(loss='mean_squared_error', optimizer='adam')
-        checkpoint = ModelCheckpoint(arguments.name, monitor='val_loss', verbose=1, save_best_only=True, mode='min', save_weights_only=False)
+        optim = keras.optimizers.Adam(lr=arguments.lr)
+        model.compile(loss='mean_squared_error', optimizer=optim)
+        if nb_epoch == 0:
+            model.save(arguments.model_file)
+            return
+        checkpoint = ModelCheckpoint(arguments.model_file, monitor='val_loss', verbose=1, save_best_only=True, mode='min', save_weights_only=False)
         csv_logger = CSVLogger(arguments.log_file, append=True, separator=';')
         early_stopping = EarlyStopping(monitor='val_loss', mode='min', min_delta=0, patience=3, verbose=1)
 
@@ -71,11 +84,16 @@ print(arguments)
 
 sequence_length=4
 hidden_layer_size=10
-num_epochs=20
+num_epochs=arguments.num_epochs
 
-X_train,Y_train = generate_single_output_data(arguments.train, sequence_length)
-print(X_train)
-print(Y_train)
-X_val,Y_val = generate_single_output_data(arguments.val, sequence_length)
+X_train,Y_train = generate_data(arguments.train, sequence_length)
+X_val,Y_val = generate_data(arguments.val, sequence_length)
+X_train = X_train + np.random.uniform(-arguments.noise,arguments.noise,np.shape(X_train))
+X_val = X_val + np.random.uniform(-arguments.noise,arguments.noise,np.shape(X_val))
+
+# predict the diff rather than absolute value
+Y_train = Y_train-np.reshape(X_train[:,-1],np.shape(Y_train))
+Y_val = Y_val-np.reshape(X_val[:,-1],np.shape(Y_val))
+
 model = getattr(models, arguments.model_name)(sequence_length,hidden_layer_size)
 fit_model(X_train, Y_train, X_val, Y_val, num_epochs, model)
