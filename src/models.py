@@ -1,7 +1,7 @@
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
-from keras.layers import Dense, Bidirectional
+from keras.layers import Dense, Bidirectional, GaussianNoise, GRU, Reshape
 from keras.layers import LSTM, Flatten, Conv1D, LocallyConnected1D, LSTM, CuDNNGRU, MaxPooling1D, GlobalAveragePooling1D, GlobalMaxPooling1D
 from math import sqrt
 from keras.layers.embeddings import Embedding
@@ -219,9 +219,44 @@ def FC(bs,time_steps,alphabet_size):
         return model
 
 # models for Siemens floating point data compression
-def FC_siemens_1hiddenlayer(input_dim,hidden_layer_size):
+def FC_siemens_0hiddenlayers(input_dim,hidden_layer_size):
     model = Sequential()
-    model.add(Dense(hidden_layer_size,activation='relu',input_dim=input_dim))
+    model.add(Dense(1,input_dim=input_dim))
+    return model
+
+def FC_siemens(input_dim,num_hidden_layers,hidden_layer_size):
+    assert num_hidden_layers > 0
+    model = Sequential()
+    model.add(Dense(hidden_layer_size, activation='relu',input_dim=input_dim))
     model.add(BatchNormalization())
+    for i in range(num_hidden_layers-1):
+        model.add(Dense(hidden_layer_size, activation='relu'))
+        model.add(BatchNormalization())
     model.add(Dense(1))
     return model
+
+def biGRU_siemens(input_dim):
+        model = Sequential()
+        model.add(Reshape((input_dim, 1), input_shape=(input_dim,)))
+#        model.add(Bidirectional(GRU(16, return_sequences=True)))
+#        model.add(BatchNormalization())
+        model.add(Bidirectional(GRU(32)))
+        model.add(BatchNormalization())
+        model.add(Dense(32, activation='relu'))
+        model.add(BatchNormalization())
+        model.add(Dense(1))
+        return model
+
+# def FC_siemens_4hiddenlayers(input_dim,hidden_layer_size,noise):
+#     model = Sequential()
+#     model.add(GaussianNoise(noise,input_shape=tuple([input_dim])))
+#     model.add(Dense(hidden_layer_size, activation='relu'))
+#     model.add(BatchNormalization())
+#     model.add(Dense(hidden_layer_size, activation='relu'))
+#     model.add(BatchNormalization())
+#     model.add(Dense(hidden_layer_size, activation='relu'))
+#     model.add(BatchNormalization())
+#     model.add(Dense(hidden_layer_size, activation='relu'))
+#     model.add(BatchNormalization())
+#     model.add(Dense(1))
+#     return model

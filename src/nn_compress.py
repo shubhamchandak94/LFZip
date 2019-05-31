@@ -15,9 +15,9 @@
 #
 
 from numpy.random import seed
-seed(1)
+seed(0)
 from tensorflow import set_random_seed
-set_random_seed(2)
+set_random_seed(42)
 
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import MinMaxScaler
@@ -38,6 +38,7 @@ import tempfile
 import shutil
 import subprocess
 import os
+from tqdm import tqdm
 
 parser = argparse.ArgumentParser(description='Input')
 parser.add_argument('-mode', action='store', dest='mode',
@@ -85,7 +86,7 @@ if args.mode == 'c':
     maxerror = np.float32(args.maxerror)
     # read file
     data = np.load(args.infile)
-    data = np.array(data,dtype=np.uint32)
+    data = np.array(data,dtype=np.float32)
     # initialize quantization (with roughly 65535 bins at the start)
     maxlevel = np.float32(65533*maxerror)
     minlevel = np.float32(-65533*maxerror)
@@ -94,13 +95,13 @@ if args.mode == 'c':
     fmtstring = 'H' # 16 bit unsigned
     bin_idx_len = 2 # in bytes
 
-    reconstruction = np.zeros(np.shape(data),dtype=np.uint32)
+    reconstruction = np.zeros(np.shape(data),dtype=np.float32)
     f_out = open(tmpfile,'wb')
     # write max error to file (needed during decompression)
     f_out.write(struct.pack('f',maxerror))
     # write length of array to file
     f_out.write(struct.pack('I',len(data)))
-    for i in range(len(data)):
+    for i in tqdm(range(len(data))):
         if i <= window_size:
             predval = np.float32(0.0)
         else:
@@ -108,7 +109,9 @@ if args.mode == 'c':
                 assert args.model_update_period > window_size+1
                 if i%args.model_update_period == 0:
                     X_train, Y_train = generate_data(reconstruction[i-args.model_update_period:i-1], window_size)
-                    model.fit(X_train, Y_train, epochs=args.num_epochs, verbose=1)
+                    # predict the diff rather than absolute value
+                    Y_train = Y_train-np.reshape(X_train[:,-1],np.shape(Y_train))
+                    model.fit(X_train, Y_train, epochs=args.num_epochs, verbose=0)
             predval = reconstruction[i-1] + np.float32(model.predict(np.reshape(reconstruction[i-window_size-1:i-1],(1,-1)))[0][0])
         diff = np.float32(data[i] - predval)
         if (diff > maxlevel + maxerror or diff < minlevel - maxerror):
@@ -122,11 +125,11 @@ if args.mode == 'c':
                 bin_idx = 0
             else:
                 bin_idx = np.digitize(diff,bins)
-                if(bin_idx != numbins and bin_idx != 0):
-                    if(np.abs(diff-bins[bin_idx])>np.abs(diff-bins[bin_idx-1])):
-                        bin_idx -= 1
-                f_out.write(struct.pack(fmtstring,bin_idx))
-                reconstruction[i] = predval + bins[bin_idx]
+            if(bin_idx != numbins and bin_idx != 0):
+                if(np.abs(diff-bins[bin_idx])>np.abs(diff-bins[bin_idx-1])):
+                    bin_idx -= 1
+            f_out.write(struct.pack(fmtstring,bin_idx))
+            reconstruction[i] = predval + bins[bin_idx]
     f_out.close()
     subprocess.run(['7z','a',args.outfile,tmpfile])
     os.remove(tmpfile)
@@ -156,8 +159,8 @@ elif args.mode == 'd':
     bins = np.linspace(minlevel,maxlevel,numbins,dtype=np.float32)
     fmtstring = 'H' # 16 bit unsigned
     bin_idx_len = 2 # in bytes
-    reconstruction = np.zeros(len_data,dtype=np.uint32)
-    for i in range(len_data):
+    reconstruction = np.zeros(len_data,dtype=np.float32)
+    for i in tqdm(range(len_data)):
         if i <= window_size:
             predval = np.float32(0.0)
         else:
@@ -165,7 +168,9 @@ elif args.mode == 'd':
                 assert args.model_update_period > window_size+1
                 if i%args.model_update_period == 0:
                     X_train, Y_train = generate_data(reconstruction[i-args.model_update_period:i-1], window_size)
-                    model.fit(X_train, Y_train, epochs=args.num_epochs, verbose=1)
+                    # predict the diff rather than absolute value
+                    Y_train = Y_train-np.reshape(X_train[:,-1],np.shape(Y_train))
+                    model.fit(X_train, Y_train, epochs=args.num_epochs, verbose=0)
             predval = reconstruction[i-1] + np.float32(model.predict(np.reshape(reconstruction[i-window_size-1:i-1],(1,-1)))[0][0])
         bin_idx = struct.unpack(fmtstring,f_in.read(bin_idx_len))[0]
         if bin_idx == numbins:

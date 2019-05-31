@@ -31,6 +31,9 @@ parser.add_argument('-model_file', action='store', default="modelfile",
 parser.add_argument('-model_name', action='store', default=None,
                     dest='model_name',
                     help='name of the model to call',required=True)
+parser.add_argument('--model_params', action='store', 
+                    dest='model_params',nargs='+',required=True, 
+                    help='model parameters (first parameter = past memory used for prediction)', type=int)
 parser.add_argument('-log_file', action='store',
                     dest='log_file', default = "log_file",
                     help='Log file')
@@ -75,17 +78,14 @@ def fit_model(X_train, Y_train, X_val, Y_val, nb_epoch, model):
         early_stopping = EarlyStopping(monitor='val_loss', mode='min', min_delta=0, patience=3, verbose=1)
 
         callbacks_list = [checkpoint, csv_logger, early_stopping]
-        #callbacks_list = [checkpoint, csv_logger]
         model.fit(X_train, Y_train, epochs=nb_epoch, verbose=1, shuffle=True, callbacks=callbacks_list, validation_data = (X_val,Y_val))
  
  
 arguments = parser.parse_args()
 print(arguments)
 
-sequence_length=4
-hidden_layer_size=10
 num_epochs=arguments.num_epochs
-
+sequence_length=arguments.model_params[0]
 X_train,Y_train = generate_data(arguments.train, sequence_length)
 X_val,Y_val = generate_data(arguments.val, sequence_length)
 X_train = X_train + np.random.uniform(-arguments.noise,arguments.noise,np.shape(X_train))
@@ -95,5 +95,5 @@ X_val = X_val + np.random.uniform(-arguments.noise,arguments.noise,np.shape(X_va
 Y_train = Y_train-np.reshape(X_train[:,-1],np.shape(Y_train))
 Y_val = Y_val-np.reshape(X_val[:,-1],np.shape(Y_val))
 
-model = getattr(models, arguments.model_name)(sequence_length,hidden_layer_size)
+model = getattr(models, arguments.model_name)(*arguments.model_params)
 fit_model(X_train, Y_train, X_val, Y_val, num_epochs, model)

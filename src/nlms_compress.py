@@ -5,6 +5,7 @@ import os
 import subprocess
 import argparse
 import numpy as np
+from tqdm import tqdm
 
 class NLMS_predictor:        
     def init(self, n):
@@ -38,7 +39,7 @@ if args.mode == 'c':
     maxerror = np.float32(args.maxerror)
     # read file
     data = np.load(args.infile)
-    data = np.array(data,dtype=np.uint32)
+    data = np.array(data,dtype=np.float32)
     # initialize quantization (with roughly 65535 bins at the start)
     maxlevel = np.float32(65533*maxerror)
     minlevel = np.float32(-65533*maxerror)
@@ -50,7 +51,7 @@ if args.mode == 'c':
     # initialize predictor
     predictor = NLMS_predictor()
     predictor.init(args.n)
-    reconstruction = np.zeros(np.shape(data),dtype=np.uint32)
+    reconstruction = np.zeros(np.shape(data),dtype=np.float32)
     f_out = open(tmpfile,'wb')
     # write max error to file (needed during decompression)
     f_out.write(struct.pack('f',maxerror))
@@ -58,10 +59,12 @@ if args.mode == 'c':
     f_out.write(struct.pack('I',len(data)))
     # write n to file
     f_out.write(struct.pack('I',args.n))
-    for i in range(len(data)):
+    for i in tqdm(range(len(data))):
         predval = np.float32(predictor.predict(reconstruction,i))
+        if not np.isfinite(predval):
+            predictor.init(args.n) # reinitialize if things go bad 
         diff = np.float32(data[i] - predval)
-        if (diff > maxlevel + maxerror or diff < minlevel - maxerror):
+        if (not np.isfinite(predval)) or diff > maxlevel + maxerror or diff < minlevel - maxerror:
             f_out.write(struct.pack(fmtstring,numbins))
             f_out.write(struct.pack('f',data[i]))
             reconstruction[i] = data[i]
@@ -72,11 +75,11 @@ if args.mode == 'c':
                 bin_idx = 0
             else:
                 bin_idx = np.digitize(diff,bins)
-                if(bin_idx != numbins and bin_idx != 0):
-                    if(np.abs(diff-bins[bin_idx])>np.abs(diff-bins[bin_idx-1])):
-                        bin_idx -= 1
-                f_out.write(struct.pack(fmtstring,bin_idx))
-                reconstruction[i] = predval + bins[bin_idx]
+            if(bin_idx != numbins and bin_idx != 0):
+                if(np.abs(diff-bins[bin_idx])>np.abs(diff-bins[bin_idx-1])):
+                    bin_idx -= 1
+            f_out.write(struct.pack(fmtstring,bin_idx))
+            reconstruction[i] = predval + bins[bin_idx]
     f_out.close()
     subprocess.run(['7z','a',args.outfile,tmpfile])
     os.remove(tmpfile)
@@ -85,11 +88,11 @@ if args.mode == 'c':
     # compute the maximum error b/w reconstrution and data and check that it is within maxerror
     maxerror_observed = np.max(np.abs(data-reconstruction))
     print('maxerror_observed',maxerror_observed)
-    assert maxerror_observed <= maxerror
 
     print('Length of time series: ', len(data))
     print('Size of compressed file: ',os.path.getsize(args.outfile), 'bytes')
     print('Reconstruction written to: ',reconfile)
+    assert maxerror_observed <= maxerror
 elif args.mode == 'd':
     tmpfile = args.infile+'.tmp'
     # extract 7z archive
@@ -111,9 +114,11 @@ elif args.mode == 'd':
     # initialize predictor
     predictor = NLMS_predictor()
     predictor.init(n_nlms)
-    reconstruction = np.zeros(len_data,dtype=np.uint32)
+    reconstruction = np.zeros(len_data,dtype=np.float32)
     for i in range(len_data):
         predval = np.float32(predictor.predict(reconstruction,i))
+        if not np.isfinite(predval):
+            predictor.init(args.n) # reinitialize if things go bad 
         bin_idx = struct.unpack(fmtstring,f_in.read(bin_idx_len))[0]
         if bin_idx == numbins:
             reconstruction[i] = np.float32(struct.unpack('f',f_in.read(4))[0])

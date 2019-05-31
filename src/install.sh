@@ -1,6 +1,7 @@
 pip install --upgrade pip
 pip install \
-    tensorflow
+    tensorflow\
+    tqdm
 conda install \
       h5py \
       matplotlib \
