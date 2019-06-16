@@ -31,7 +31,7 @@ parser.add_argument('-model_file', action='store', default="modelfile",
 parser.add_argument('-model_name', action='store', default=None,
                     dest='model_name',
                     help='name of the model to call',required=True)
-parser.add_argument('--model_params', action='store', 
+parser.add_argument('-model_params', action='store', 
                     dest='model_params',nargs='+',required=True, 
                     help='model parameters (first parameter = past memory used for prediction)', type=int)
 parser.add_argument('-log_file', action='store',
