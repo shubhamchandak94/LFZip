@@ -1,24 +1,16 @@
-#
-# Compression application using adaptive arithmetic coding
-#
-# Usage: python adaptive-arithmetic-compress.py InputFile OutputFile
-# Then use the corresponding adaptive-arithmetic-decompress.py application to recreate the original input file.
-# Note that the application starts with a flat frequency table of 257 symbols (all set to a frequency of 1),
-# and updates it after each byte encoded. The corresponding decompressor program also starts with a flat
-# frequency table and updates it after each byte decoded. It is by design that the compressor and
-# decompressor have synchronized states, so that the data can be decompressed properly.
-#
-# Copyright (c) Project Nayuki
-#
-# https://www.nayuki.io/page/reference-arithmetic-coding
-# https://github.com/nayuki/Reference-arithmetic-coding
-#
-
+# steps for reproducibility (also need to call with CUDA_VISIBLE_DEVICES="" PYTHONHASHSEED=0)
 from numpy.random import seed
 seed(0)
 from tensorflow import set_random_seed
 set_random_seed(42)
-
+import random as rn
+rn.seed(12345)
+import tensorflow as tf
+session_conf = tf.ConfigProto(intra_op_parallelism_threads=1,
+                              inter_op_parallelism_threads=1)
+sess = tf.Session(graph=tf.get_default_graph(), config=session_conf)
+from keras import backend as K
+K.set_session(sess)
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import OneHotEncoder
@@ -27,18 +19,18 @@ from keras.models import Sequential
 from keras.models import model_from_json
 from keras.models import load_model
 from keras.layers.normalization import BatchNormalization
-import tensorflow as tf
+
 import numpy as np
 import argparse
 import contextlib
 import json
 import struct
-import models
 import tempfile
 import shutil
 import subprocess
 import os
 from tqdm import tqdm
+import models
 
 parser = argparse.ArgumentParser(description='Input')
 parser.add_argument('-mode', action='store', dest='mode',
@@ -76,22 +68,34 @@ def generate_data(series, time_steps):
 model = load_model(args.model_file)
 window_size = model.layers[0].input_shape[1]
 print('window_size',window_size)
-K.set_value(model.optimizer.lr, args.lr)
+
 
 if args.mode == 'c':
     if args.maxerror == None:
         raise RuntimeError('maxerror not specified for mode c')
+
+    model_update_flag = False
+    if args.model_update_period is not None:
+        assert args.model_update_period > window_size+1
+        model_update_flag = True
+        lr = np.float32(args.lr)
+        model_update_period = args.model_update_period
+        K.set_value(model.optimizer.lr, lr)
+
     tmpfile = args.outfile+'.tmp'
     reconfile = args.outfile+'.recon.npy'
     maxerror = np.float32(args.maxerror)
     # read file
     data = np.load(args.infile)
     data = np.array(data,dtype=np.float32)
-    # initialize quantization (with roughly 65535 bins at the start)
-    maxlevel = np.float32(65533*maxerror)
-    minlevel = np.float32(-65533*maxerror)
-    numbins = int((maxlevel-minlevel)/(2*maxerror))+2
+    # initialize quantization (with 65535 bins)
+    maxlevel = np.float32(65000*maxerror)
+    minlevel = np.float32(-65000*maxerror)
+    # 65000 to avoid issues with floating point precision and make sure that error is below maxerror
+    numbins = 65535
     bins = np.linspace(minlevel,maxlevel,numbins,dtype=np.float32)
+    assert np.max(np.diff(bins)) <= 2*maxerror
+    assert np.min(np.abs(bins)) == 0.0
     fmtstring = 'H' # 16 bit unsigned
     bin_idx_len = 2 # in bytes
 
@@ -101,14 +105,20 @@ if args.mode == 'c':
     f_out.write(struct.pack('f',maxerror))
     # write length of array to file
     f_out.write(struct.pack('I',len(data)))
+    # write flag indicating if model update is used
+    f_out.write(struct.pack('?',model_update_flag))
+    # if model update is used, write the associated parameters
+    if model_update_flag:
+        f_out.write(struct.pack('I',model_update_period))
+        f_out.write(struct.pack('f',lr))
+
     for i in tqdm(range(len(data))):
         if i <= window_size:
             predval = np.float32(0.0)
         else:
-            if args.model_update_period != None:
-                assert args.model_update_period > window_size+1
-                if i%args.model_update_period == 0:
-                    X_train, Y_train = generate_data(reconstruction[i-args.model_update_period:i-1], window_size)
+            if model_update_flag:
+                if i%model_update_period == 0:
+                    X_train, Y_train = generate_data(reconstruction[i-model_update_period:i-1], window_size)
                     # predict the diff rather than absolute value
                     Y_train = Y_train-np.reshape(X_train[:,-1],np.shape(Y_train))
                     model.fit(X_train, Y_train, epochs=args.num_epochs, verbose=0)
@@ -152,11 +162,22 @@ elif args.mode == 'd':
     maxerror = np.float32(struct.unpack('f',f_in.read(4))[0])
     # read length of data
     len_data = struct.unpack('I',f_in.read(4))[0]
-    # initialize quantization (with roughly 65535 bins at the start)
-    maxlevel = np.float32(65533*maxerror)
-    minlevel = np.float32(-65533*maxerror)
-    numbins = int((maxlevel-minlevel)/(2*maxerror))+2
+    # read flag indicating if model update is used
+    model_update_flag = bool(struct.unpack('?',f_in.read(1))[0])
+    # if model update is used, read the associated parameters
+    if model_update_flag:
+        model_update_period = struct.unpack('I',f_in.read(4))[0]
+        assert model_update_period > window_size+1
+        lr = np.float32(struct.unpack('f',f_in.read(4))[0])
+        K.set_value(model.optimizer.lr, lr)
+    # initialize quantization (with 65535 bins)
+    maxlevel = np.float32(65000*maxerror)
+    minlevel = np.float32(-65000*maxerror)
+    # 65000 to avoid issues with floating point precision and make sure that error is below maxerror
+    numbins = 65535
     bins = np.linspace(minlevel,maxlevel,numbins,dtype=np.float32)
+    assert np.max(np.diff(bins)) <= 2*maxerror
+    assert np.min(np.abs(bins)) == 0.0
     fmtstring = 'H' # 16 bit unsigned
     bin_idx_len = 2 # in bytes
     reconstruction = np.zeros(len_data,dtype=np.float32)
@@ -164,10 +185,9 @@ elif args.mode == 'd':
         if i <= window_size:
             predval = np.float32(0.0)
         else:
-            if args.model_update_period != None:
-                assert args.model_update_period > window_size+1
-                if i%args.model_update_period == 0:
-                    X_train, Y_train = generate_data(reconstruction[i-args.model_update_period:i-1], window_size)
+            if model_update_flag:
+                if i%model_update_period == 0:
+                    X_train, Y_train = generate_data(reconstruction[i-model_update_period:i-1], window_size)
                     # predict the diff rather than absolute value
                     Y_train = Y_train-np.reshape(X_train[:,-1],np.shape(Y_train))
                     model.fit(X_train, Y_train, epochs=args.num_epochs, verbose=0)

@@ -1,3 +1,17 @@
+# steps for reproducibility (also need to call with CUDA_VISIBLE_DEVICES="" PYTHONHASHSEED=0)
+from numpy.random import seed
+seed(0)
+from tensorflow import set_random_seed
+set_random_seed(42)
+import random as rn
+rn.seed(12345)
+import tensorflow as tf
+session_conf = tf.ConfigProto(intra_op_parallelism_threads=1,
+                              inter_op_parallelism_threads=1)
+sess = tf.Session(graph=tf.get_default_graph(), config=session_conf)
+from keras import backend as K
+K.set_session(sess)
+
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import MinMaxScaler
 from math import sqrt
@@ -7,16 +21,11 @@ from keras.callbacks import ModelCheckpoint, EarlyStopping
 import keras
 from sklearn.preprocessing import OneHotEncoder
 from keras.layers.normalization import BatchNormalization
-import tensorflow as tf
 import numpy as np
 import argparse
 import os
 from keras.callbacks import CSVLogger
-
 import models
-
-tf.set_random_seed(42)
-np.random.seed(0)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-train', action='store', default=None,

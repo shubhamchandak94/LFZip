@@ -1,3 +1,4 @@
+# call with PYTHONHASHSEED=0 to ensure determinism
 import numpy as np
 import struct
 import padasip as pa
@@ -40,11 +41,14 @@ if args.mode == 'c':
     # read file
     data = np.load(args.infile)
     data = np.array(data,dtype=np.float32)
-    # initialize quantization (with roughly 65535 bins at the start)
-    maxlevel = np.float32(65533*maxerror)
-    minlevel = np.float32(-65533*maxerror)
-    numbins = int((maxlevel-minlevel)/(2*maxerror))+2
+    # initialize quantization (with 65535 bins)
+    maxlevel = np.float32(65000*maxerror)
+    minlevel = np.float32(-65000*maxerror)
+    # 65000 to avoid issues with floating point precision and make sure that error is below maxerror
+    numbins = 65535
     bins = np.linspace(minlevel,maxlevel,numbins,dtype=np.float32)
+    assert np.max(np.diff(bins)) <= 2*maxerror
+    assert np.min(np.abs(bins)) == 0.0
     fmtstring = 'H' # 16 bit unsigned
     bin_idx_len = 2 # in bytes
 
@@ -104,11 +108,14 @@ elif args.mode == 'd':
     len_data = struct.unpack('I',f_in.read(4))[0]
     # read n from file
     n_nlms = struct.unpack('I',f_in.read(4))[0]
-    # initialize quantization (with roughly 65535 bins at the start)
-    maxlevel = np.float32(65533*maxerror)
-    minlevel = np.float32(-65533*maxerror)
-    numbins = int((maxlevel-minlevel)/(2*maxerror))+2
+    # initialize quantization (with 65535 bins)
+    maxlevel = np.float32(65000*maxerror)
+    minlevel = np.float32(-65000*maxerror)
+    # 65000 to avoid issues with floating point precision and make sure that error is below maxerror
+    numbins = 65535
     bins = np.linspace(minlevel,maxlevel,numbins,dtype=np.float32)
+    assert np.max(np.diff(bins)) <= 2*maxerror
+    assert np.min(np.abs(bins)) == 0.0
     fmtstring = 'H' # 16 bit unsigned
     bin_idx_len = 2 # in bytes
     # initialize predictor
