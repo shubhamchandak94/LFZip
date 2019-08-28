@@ -1,16 +1,37 @@
 # steps for reproducibility (also need to call with CUDA_VISIBLE_DEVICES="" PYTHONHASHSEED=0)
-from numpy.random import seed
-seed(0)
-from tensorflow import set_random_seed
-set_random_seed(42)
-import random as rn
-rn.seed(12345)
+import numpy as np
 import tensorflow as tf
+import random as rn
+
+# The below is necessary for starting Numpy generated random numbers
+# in a well-defined initial state.
+
+np.random.seed(42)
+
+# The below is necessary for starting core Python generated random numbers
+# in a well-defined state.
+
+rn.seed(12345)
+
+# Force TensorFlow to use single thread.
+# Multiple threads are a potential source of non-reproducible results.
+# For further details, see: https://stackoverflow.com/questions/42022950/
+
 session_conf = tf.ConfigProto(intra_op_parallelism_threads=1,
                               inter_op_parallelism_threads=1)
-sess = tf.Session(graph=tf.get_default_graph(), config=session_conf)
+
 from keras import backend as K
+
+# The below tf.set_random_seed() will make random number generation
+# in the TensorFlow backend have a well-defined initial state.
+# For further details, see:
+# https://www.tensorflow.org/api_docs/python/tf/set_random_seed
+
+tf.set_random_seed(1234)
+
+sess = tf.Session(graph=tf.get_default_graph(), config=session_conf)
 K.set_session(sess)
+
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import OneHotEncoder
@@ -80,7 +101,9 @@ if args.mode == 'c':
         model_update_flag = True
         lr = np.float32(args.lr)
         model_update_period = args.model_update_period
-        K.set_value(model.optimizer.lr, lr)
+        optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=lr)
+        model.compile(optimizer=optimizer, loss='mse')
+#        K.set_value(model.optimizer.lr, lr)
 
     tmpfile = args.outfile+'.tmp'
     reconfile = args.outfile+'.recon.npy'
@@ -169,7 +192,9 @@ elif args.mode == 'd':
         model_update_period = struct.unpack('I',f_in.read(4))[0]
         assert model_update_period > window_size+1
         lr = np.float32(struct.unpack('f',f_in.read(4))[0])
-        K.set_value(model.optimizer.lr, lr)
+        optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=lr)
+        model.compile(optimizer=optimizer, loss='mse')
+#       K.set_value(model.optimizer.lr, lr)
     # initialize quantization (with 65535 bins)
     maxlevel = np.float32(65000*maxerror)
     minlevel = np.float32(-65000*maxerror)
