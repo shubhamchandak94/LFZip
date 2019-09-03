@@ -101,6 +101,7 @@ if args.mode == 'c':
         model_update_flag = True
         lr = np.float32(args.lr)
         model_update_period = args.model_update_period
+        num_epochs = args.num_epochs
         optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=lr)
         model.compile(optimizer=optimizer, loss='mse')
 #        K.set_value(model.optimizer.lr, lr)
@@ -134,7 +135,7 @@ if args.mode == 'c':
     if model_update_flag:
         f_out.write(struct.pack('I',model_update_period))
         f_out.write(struct.pack('f',lr))
-
+        f_out.write(struct.pack('I',num_epochs))
     for i in tqdm(range(len(data))):
         if i <= window_size:
             predval = np.float32(0.0)
@@ -144,7 +145,7 @@ if args.mode == 'c':
                     X_train, Y_train = generate_data(reconstruction[i-model_update_period:i-1], window_size)
                     # predict the diff rather than absolute value
                     Y_train = Y_train-np.reshape(X_train[:,-1],np.shape(Y_train))
-                    model.fit(X_train, Y_train, epochs=args.num_epochs, verbose=0)
+                    model.fit(X_train, Y_train, epochs=num_epochs, verbose=0)
             predval = reconstruction[i-1] + np.float32(model.predict(np.reshape(reconstruction[i-window_size-1:i-1],(1,-1)))[0][0])
         diff = np.float32(data[i] - predval)
         if (diff > maxlevel + maxerror or diff < minlevel - maxerror):
@@ -179,7 +180,10 @@ if args.mode == 'c':
 elif args.mode == 'd':
     tmpfile = args.infile+'.tmp'
     # extract 7z archive
-    subprocess.run(['7z','e',args.infile])
+    dirname = os.path.dirname(args.infile)
+    if dirname == '':
+        dirname = '.'
+    subprocess.run(['7z','e','-o'+dirname,args.infile])
     f_in = open(tmpfile,'rb')
     # read max error from file
     maxerror = np.float32(struct.unpack('f',f_in.read(4))[0])
@@ -192,6 +196,7 @@ elif args.mode == 'd':
         model_update_period = struct.unpack('I',f_in.read(4))[0]
         assert model_update_period > window_size+1
         lr = np.float32(struct.unpack('f',f_in.read(4))[0])
+        num_epochs = struct.unpack('I',f_in.read(4))[0]
         optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=lr)
         model.compile(optimizer=optimizer, loss='mse')
 #       K.set_value(model.optimizer.lr, lr)
@@ -215,7 +220,7 @@ elif args.mode == 'd':
                     X_train, Y_train = generate_data(reconstruction[i-model_update_period:i-1], window_size)
                     # predict the diff rather than absolute value
                     Y_train = Y_train-np.reshape(X_train[:,-1],np.shape(Y_train))
-                    model.fit(X_train, Y_train, epochs=args.num_epochs, verbose=0)
+                    model.fit(X_train, Y_train, epochs=num_epochs, verbose=0)
             predval = reconstruction[i-1] + np.float32(model.predict(np.reshape(reconstruction[i-window_size-1:i-1],(1,-1)))[0][0])
         bin_idx = struct.unpack(fmtstring,f_in.read(bin_idx_len))[0]
         if bin_idx == numbins:

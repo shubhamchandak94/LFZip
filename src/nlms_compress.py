@@ -9,8 +9,8 @@ import numpy as np
 from tqdm import tqdm
 
 class NLMS_predictor:        
-    def init(self, n):
-        self.filt = pa.filters.FilterNLMS(n, mu=1.,w="zeros")
+    def __init__(self, n, mu):
+        self.filt = pa.filters.FilterNLMS(n, mu=mu,w="zeros")
         self.n = n
         return
     def predict(self,past,idx):
@@ -28,6 +28,7 @@ parser.add_argument('-mode', action='store', dest='mode',
 parser.add_argument('-infile', action='store', dest='infile', help = 'infile .npy/.7z', type = str, required=True)
 parser.add_argument('-outfile', action='store', dest='outfile', help = 'outfile .npy/.7z', type = str, required=True)
 parser.add_argument('-n', action='store', dest='n', help = 'order of NLMS filter for compression (default 4)', type = int, default = 4)
+parser.add_argument('-mu', action='store', dest='mu', help = 'learning rate of NLMS for compression (default 0.5)', type = float, default = 0.5)
 parser.add_argument('-maxerror', action='store', dest='maxerror', help = 'max allowed error for compression', type=float)
 
 args = parser.parse_args()
@@ -51,11 +52,12 @@ if args.mode == 'c':
     assert np.min(np.abs(bins)) == 0.0
     fmtstring = 'H' # 16 bit unsigned
     bin_idx_len = 2 # in bytes
-
+    
     # initialize predictor
-    predictor = NLMS_predictor()
-    predictor.init(args.n)
+    mu = np.float32(args.mu)
+    predictor = NLMS_predictor(args.n, mu)
     reconstruction = np.zeros(np.shape(data),dtype=np.float32)
+
     f_out = open(tmpfile,'wb')
     # write max error to file (needed during decompression)
     f_out.write(struct.pack('f',maxerror))
@@ -63,6 +65,8 @@ if args.mode == 'c':
     f_out.write(struct.pack('I',len(data)))
     # write n to file
     f_out.write(struct.pack('I',args.n))
+    # write mu to file
+    f_out.write(struct.pack('f',mu))
     for i in tqdm(range(len(data))):
         predval = np.float32(predictor.predict(reconstruction,i))
         if not np.isfinite(predval):
@@ -100,7 +104,10 @@ if args.mode == 'c':
 elif args.mode == 'd':
     tmpfile = args.infile+'.tmp'
     # extract 7z archive
-    subprocess.run(['7z','e',args.infile])
+    dirname = os.path.dirname(args.infile)
+    if dirname == '':
+        dirname = '.'
+    subprocess.run(['7z','e','-o'+dirname,args.infile])
     f_in = open(tmpfile,'rb')
     # read max error from file
     maxerror = np.float32(struct.unpack('f',f_in.read(4))[0])
@@ -108,6 +115,8 @@ elif args.mode == 'd':
     len_data = struct.unpack('I',f_in.read(4))[0]
     # read n from file
     n_nlms = struct.unpack('I',f_in.read(4))[0]
+    # red mu from file
+    mu_nlms = np.float32(struct.unpack('f',f_in.read(4))[0])
     # initialize quantization (with 65535 bins)
     maxlevel = np.float32(65000*maxerror)
     minlevel = np.float32(-65000*maxerror)
@@ -119,10 +128,9 @@ elif args.mode == 'd':
     fmtstring = 'H' # 16 bit unsigned
     bin_idx_len = 2 # in bytes
     # initialize predictor
-    predictor = NLMS_predictor()
-    predictor.init(n_nlms)
+    predictor = NLMS_predictor(n_nlms, mu_nlms)
     reconstruction = np.zeros(len_data,dtype=np.float32)
-    for i in range(len_data):
+    for i in tqdm(range(len_data)):
         predval = np.float32(predictor.predict(reconstruction,i))
         if not np.isfinite(predval):
             predictor.init(args.n) # reinitialize if things go bad 
