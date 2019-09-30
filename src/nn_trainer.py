@@ -26,8 +26,8 @@ parser.add_argument('-train', action='store', default=None,
 parser.add_argument('-val', action='store', default=None,
                     dest='val',
                     help='choose validation sequence file',required=True)
-parser.add_argument('-model_file', action='store', default="modelfile",
-                    dest='model_file',
+parser.add_argument('-model_file', action='store', required = True,
+                    dest='model_file', 
                     help='weights will be stored with this name')
 parser.add_argument('-model_name', action='store', default=None,
                     dest='model_name',
