@@ -26,20 +26,34 @@ conda activate no_avx_env
 ### NLMS model
 #### Compression:
 ```
-python3 nlms_compress.py -mode c -infile file_to_be_compressed.npy -outfile compressed_file.7z \
-                         [-n n] [-mu mu] [-maxerror maxerror]
+python3 nlms_compress.py [-h] --mode MODE --infile INFILE --outfile OUTFILE
+                        [--NLMS_order N [N ...]] [--mu MU [MU ...]]
+                        [--absolute_error MAXERROR [MAXERROR ...]]
+                        [--quantization_bytes QUANTIZATION_BYTES [QUANTIZATION_BYTES ...]]
 ```
 with the parameters: 
 ```
-n:        (int) order of NLMS filter, default 4
-mu:       (float) learning rate of NLMS filter, default 0.5
-maxerror: (float) maximum allowed error in reconstruction
+  -h, --help            show this help message and exit
+  --mode MODE, -m MODE  c or d (compress/decompress)
+  --infile INFILE, -i INFILE
+                        infile .npy/.bsc
+  --outfile OUTFILE, -o OUTFILE
+                        outfile .bsc/.npy
+  --NLMS_order N [N ...], -n N [N ...]
+                        order of NLMS filter for compression (default 4) -
+                        single value or one per time series
+  --mu MU [MU ...]      learning rate of NLMS for compression (default 0.5) -
+                        single value or one per time series
+  --absolute_error MAXERROR [MAXERROR ...], -a MAXERROR [MAXERROR ...]
+                        max allowed error for compression - single value or
+                        one per time series
+  --quantization_bytes QUANTIZATION_BYTES [QUANTIZATION_BYTES ...], -q QUANTIZATION_BYTES [QUANTIZATION_BYTES ...]
+                        number of bytes used to encode quantized error -
+                        decides number of quantization levels. Valid values
+                        are 1, 2 (default: 2) - single value or one per time
+                        series
 ```
-The reconstructed time series is also generated as a byproduct and stored as `compressed_file.7z.recon.npy`.
-#### Decompression
-```
-python3 nlms_compress.py -mode d -infile compressed_file.7z -outfile decompressed_file.npy
-```
+The reconstructed time series is also generated as a byproduct and stored as `compressed_file.bsc.recon.npy`.
 
 ### Neural network model
 #### Training a model
@@ -58,23 +72,37 @@ epochs:       (int) number of epochs to train (0 means store random model)
 ```
 #### Compression 
 ```
-CUDA_VISIBLE_DEVICES="" PYTHONHASHSEED=0 python3 nn_compress.py -mode c -infile file_to_be_compressed.npy \
--outfile compressed_file.7z -model_file saved_model.h5 -maxerror maxerror\
-[-model_update_period model_update_period -lr lr -epochs epochs]
+CUDA_VISIBLE_DEVICES="" PYTHONHASHSEED=0 python3 nn_compress.py [-h] --mode MODE --infile INFILE --outfile OUTFILE
+                      [--absolute_error MAXERROR] --model_file MODEL_FILE
+                      [--quantization_bytes QUANTIZATION_BYTES]
+                      [--model_update_period MODEL_UPDATE_PERIOD] [--lr LR]
+                      [--epochs NUM_EPOCHS]
 ```
 with the parameters:
 ```
-maxerror:             (float) maximum allowed error in reconstruction
-model_update_period:  (int) frequency of updating model, default: never
-lr:                   (float) learning rate of Adam when updating model, default 1e-3
-epochs:               (int) number of training epochs in each model update, deafult 1
+  -h, --help            show this help message and exit
+  --mode MODE, -m MODE  c or d (compress/decompress)
+  --infile INFILE, -i INFILE
+                        infile .npy/bsc
+  --outfile OUTFILE, -o OUTFILE
+                        outfile .bsc/.npy
+  --absolute_error MAXERROR, -a MAXERROR
+                        max allowed error for compression
+  --model_file MODEL_FILE
+                        model file
+  --quantization_bytes QUANTIZATION_BYTES, -q QUANTIZATION_BYTES
+                        number of bytes used to encode quantized error -
+                        decides number of quantization levels. Valid values
+                        are 1, 2 (deafult: 2)
+  --model_update_period MODEL_UPDATE_PERIOD
+                        train model (both during compression & decompression)
+                        after seeing these many symbols (default: never train)
+  --lr LR               learning rate for Adam
+  --epochs NUM_EPOCHS   number of epochs to train
 ```
 The `CUDA_VISIBLE_DEVICES="" PYTHONHASHSEED=0` environment variables are set to ensure that the decompression works precisely the same as the compression and generates the correct reconstruction.
-#### Decompression
-```
-CUDA_VISIBLE_DEVICES="" PYTHONHASHSEED=0 python3 nn_compress.py -mode d -infile compressed_file.7z \
--outfile decompressed_file.npy -model_file saved_model.h5
-```
 
 ### Other helpful scripts
 `data/dat_to_np.py`: convert a .dat file (with 1 time series value in plaintext per line) to .npy file
+`data/npy_to_bin.py`: convert a .npy file to binary file used as input to SZ
+`data/bin_to_npy.py`: convert a .bin file to .npy file
