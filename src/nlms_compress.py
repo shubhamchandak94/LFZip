@@ -30,7 +30,7 @@ parser = argparse.ArgumentParser(description='Input')
 parser.add_argument('--mode','-m', action='store', dest='mode',
                     help='c or d (compress/decompress)', required=True)
 parser.add_argument('--infile','-i', action='store', dest='infile', help = 'infile .npy/.bsc', type = str, required=True)
-parser.add_argument('--outfile','-o', action='store', dest='outfile', help = 'outfile ./bsc/.npy', type = str, required=True)
+parser.add_argument('--outfile','-o', action='store', dest='outfile', help = 'outfile .bsc/.npy', type = str, required=True)
 parser.add_argument('--NLMS_order','-n', action='store', nargs = '+', dest='n', help = 'order of NLMS filter for compression (default 4) - single value or one per time series', type = int, default = [4])
 parser.add_argument('--mu', action='store', nargs = '+', dest='mu', help = 'learning rate of NLMS for compression (default 0.5) - single value or one per time series', type = float, default = [0.5])
 parser.add_argument('--absolute_error','-a', action='store', nargs='+', dest='maxerror', help = 'max allowed error for compression - single value or one per time series', type=float)
@@ -156,16 +156,16 @@ if args.mode == 'c':
         for j in range(nseries):
             tar_handle.add(tmpfile_bin_idx[j],arcname=os.path.basename(tmpfile_bin_idx[j]))
             tar_handle.add(tmpfile_float[j],arcname=os.path.basename(tmpfile_float[j]))
-    # apply BSC compreession
+    # apply BSC compression
     subprocess.run([BSC_PATH,'e',tar_archive_name,args.outfile,'-b64p','-e2'])
     # save reconstruction to a file (for comparing later)
     np.save(reconfile,reconstruction)
     # compute the maximum error b/w reconstrution and data and check that it is within maxerror
     for j in range(nseries):
         print('j:',j)
-        maxerror_observed = np.max(np.abs(data-reconstruction))
-        RMSE = np.sqrt(np.mean((data-reconstruction)**2))
-        MAE = np.mean(np.abs(data-reconstruction))
+        maxerror_observed = np.max(np.abs(data[j,:]-reconstruction[j,:]))
+        RMSE = np.sqrt(np.mean((data[j,:]-reconstruction[j,:])**2))
+        MAE = np.mean(np.abs(data[j,:]-reconstruction[j,:]))
         print('maxerror_observed:',maxerror_observed)
         print('RMSE:',RMSE)
         print('MAE:',MAE)

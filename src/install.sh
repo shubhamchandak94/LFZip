@@ -1,7 +1,7 @@
 pip install --upgrade pip
 pip install \
-    tensorflow\
-    tensorflow-gpu\
+    tensorflow==1.15 \
+    tensorflow-gpu==1.15 \
     tqdm
 conda install \
       h5py \

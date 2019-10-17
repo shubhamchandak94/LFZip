@@ -52,20 +52,25 @@ import subprocess
 import os
 from tqdm import tqdm
 import models
+import tarfile
+import shutil
+
+BSC_PATH = os.path.dirname(os.path.realpath(__file__))+'/libbsc/bsc'
 
 parser = argparse.ArgumentParser(description='Input')
-parser.add_argument('-mode', action='store', dest='mode',
+parser.add_argument('--mode','-m', action='store', dest='mode',
         help='c or d (compress/decompress)', required=True)
-parser.add_argument('-infile', action='store', dest='infile', help = 'infile .npy/.7z', type = str, required=True)
-parser.add_argument('-outfile', action='store', dest='outfile', help = 'outfile .npy/.7z', type = str, required=True)
-parser.add_argument('-maxerror', action='store', dest='maxerror', help = 'max allowed error for compression', type=float)
-parser.add_argument('-model_file', action='store', dest='model_file',
+parser.add_argument('--infile','-i', action='store', dest='infile', help = 'infile .npy/bsc', type = str, required=True)
+parser.add_argument('--outfile','-o', action='store', dest='outfile', help = 'outfile .bsc/.npy', type = str, required=True)
+parser.add_argument('--absolute_error','-a', action='store', dest='maxerror', help = 'max allowed error for compression', type=float)
+parser.add_argument('--model_file', action='store', dest='model_file',
                     help='model file', required=True)
-parser.add_argument('-model_update_period', action='store', dest='model_update_period', help = 'train model (both during compression & decompression) after seeing these many symbols (default: never train)', type = int)
-parser.add_argument('-lr', action='store', type=float,
+parser.add_argument('--quantization_bytes','-q', action='store', dest='quantization_bytes', help = 'number of bytes used to encode quantized error - decides number of quantization levels. Valid values are 1, 2 (deafult: 2)', type = int, default = 2)
+parser.add_argument('--model_update_period', action='store', dest='model_update_period', help = 'train model (both during compression & decompression) after seeing these many symbols (default: never train)', type = int)
+parser.add_argument('--lr', action='store', type=float,
 	dest='lr', default = 1e-3,
 	help='learning rate for Adam')
-parser.add_argument('-epochs', action='store',
+parser.add_argument('--epochs', action='store',
 	dest='num_epochs', type = int, default = 1,
 	help='number of epochs to train')
 
@@ -94,7 +99,7 @@ print('window_size',window_size)
 if args.mode == 'c':
     if args.maxerror == None:
         raise RuntimeError('maxerror not specified for mode c')
-
+    
     model_update_flag = False
     if args.model_update_period is not None:
         assert args.model_update_period > window_size+1
@@ -104,38 +109,61 @@ if args.mode == 'c':
         num_epochs = args.num_epochs
         optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=lr)
         model.compile(optimizer=optimizer, loss='mse')
-#        K.set_value(model.optimizer.lr, lr)
 
     tmpfile = args.outfile+'.tmp'
     reconfile = args.outfile+'.recon.npy'
     maxerror = np.float32(args.maxerror)
     # read file
     data = np.load(args.infile)
-    data = np.array(data,dtype=np.float32)
-    # initialize quantization (with 65535 bins)
-    maxlevel = np.float32(65000*maxerror)
-    minlevel = np.float32(-65000*maxerror)
-    # 65000 to avoid issues with floating point precision and make sure that error is below maxerror
-    numbins = 65535
-    bins = np.linspace(minlevel,maxlevel,numbins,dtype=np.float32)
-    assert np.max(np.diff(bins)) <= 2*maxerror
-    assert np.min(np.abs(bins)) == 0.0
-    fmtstring = 'H' # 16 bit unsigned
-    bin_idx_len = 2 # in bytes
+    assert data.dtype == 'float32'
+    if data.ndim != 1:
+        if data.ndim == 2 and data.shape[0] == 1:
+            data = np.reshpape(data, (-1))
+    assert data.ndim == 1
+
+    maxerror_original = np.float32(maxerror)
+    assert maxerror_original > np.finfo(np.float32).resolution
+    # reduce maxerror a little bit to make sure that we don't run into numeric precision issues while binning
+    maxerror = maxerror_original - np.finfo(np.float32).resolution
+    if args.quantization_bytes not in [1,2]:
+        raise RuntimeError('Invalid quantization_bytes - valid values are 1,2')
+    if args.quantization_bytes == 1:
+        fmtstring = 'b' # 8 bit signed
+        bin_idx_len = 1 # in bytes
+        max_bin_idx = 127
+        min_bin_idx = -127
+    else:
+        fmtstring = 'h' # 16 bit signed
+        bin_idx_len = 2 # in bytes
+        max_bin_idx = 32767
+        min_bin_idx = -32767
 
     reconstruction = np.zeros(np.shape(data),dtype=np.float32)
-    f_out = open(tmpfile,'wb')
+
+    tmpdir = args.outfile+'.tmp.dir/'
+    os.makedirs(tmpdir, exist_ok = True)
+    tmpfile_bin_idx = tmpdir+'bin_idx'
+    tmpfile_float = tmpdir+'float'
+    tmpfile_params = tmpdir+'params'
+
+    f_out_bin_idx = open(tmpfile_bin_idx, 'wb')
+    f_out_params = open(tmpfile_params, 'wb')
+    f_out_float = open(tmpfile_float, 'wb')
+
     # write max error to file (needed during decompression)
-    f_out.write(struct.pack('f',maxerror))
+    f_out_params.write(struct.pack('f',maxerror))
     # write length of array to file
-    f_out.write(struct.pack('I',len(data)))
+    f_out_params.write(struct.pack('I',len(data)))
     # write flag indicating if model update is used
-    f_out.write(struct.pack('?',model_update_flag))
+    f_out_params.write(struct.pack('?',model_update_flag))
+    # write num quantization bytes to file
+    f_out_params.write(struct.pack('B',args.quantization_bytes))
+
     # if model update is used, write the associated parameters
     if model_update_flag:
-        f_out.write(struct.pack('I',model_update_period))
-        f_out.write(struct.pack('f',lr))
-        f_out.write(struct.pack('I',num_epochs))
+        f_out_params.write(struct.pack('I',model_update_period))
+        f_out_params.write(struct.pack('f',lr))
+        f_out_params.write(struct.pack('I',num_epochs))
     for i in tqdm(range(len(data))):
         if i <= window_size:
             predval = np.float32(0.0)
@@ -148,49 +176,85 @@ if args.mode == 'c':
                     model.fit(X_train, Y_train, epochs=num_epochs, verbose=0)
             predval = reconstruction[i-1] + np.float32(model.predict(np.reshape(reconstruction[i-window_size-1:i-1],(1,-1)))[0][0])
         diff = np.float32(data[i] - predval)
-        if (diff > maxlevel + maxerror or diff < minlevel - maxerror):
-            f_out.write(struct.pack(fmtstring,numbins))
-            f_out.write(struct.pack('f',data[i]))
+        bin_idx = int(round(diff/(2*maxerror)))
+        if bin_idx > max_bin_idx or bin_idx < min_bin_idx:
+            f_out_bin_idx.write(struct.pack(fmtstring,min_bin_idx-1))
+            f_out_float.write(struct.pack('f',data[i]))
             reconstruction[i] = data[i]
         else:
-            if diff > maxlevel:
-                bin_idx = numbins - 1
-            elif diff < minlevel:
-                bin_idx = 0
+            reconstruction[i] = predval + np.float32(bin_idx*2*maxerror)
+            # check if numeric precision issues present, if yes, just store original data as it is
+            if np.abs(reconstruction[i]-data[i]) > maxerror_original:
+                f_out_bin_idx.write(struct.pack(fmtstring,min_bin_idx-1))
+                f_out_float.write(struct.pack('f',data[i]))
+                reconstruction[i] = data[i]
             else:
-                bin_idx = np.digitize(diff,bins)
-            if(bin_idx != numbins and bin_idx != 0):
-                if(np.abs(diff-bins[bin_idx])>np.abs(diff-bins[bin_idx-1])):
-                    bin_idx -= 1
-            f_out.write(struct.pack(fmtstring,bin_idx))
-            reconstruction[i] = predval + bins[bin_idx]
-    f_out.close()
-    subprocess.run(['7z','a',args.outfile,tmpfile])
-    os.remove(tmpfile)
+                f_out_bin_idx.write(struct.pack(fmtstring,bin_idx))
+    f_out_params.close()
+    f_out_bin_idx.close()
+    f_out_float.close()
+
+    # create tar archive
+    tar_archive_name = args.outfile+'.tar'
+    with tarfile.open(tar_archive_name, "w:") as tar_handle:
+        tar_handle.add(tmpfile_params,arcname=os.path.basename(tmpfile_params))
+        tar_handle.add(tmpfile_bin_idx,arcname=os.path.basename(tmpfile_bin_idx))
+        tar_handle.add(tmpfile_float,arcname=os.path.basename(tmpfile_float))
+
+    # apply BSC compreession
+    subprocess.run([BSC_PATH,'e',tar_archive_name,args.outfile,'-b64p','-e2'])
     # save reconstruction to a file (for comparing later)
     np.save(reconfile,reconstruction)
 
     # compute the maximum error b/w reconstrution and data and check that it is within maxerror
     maxerror_observed = np.max(np.abs(data-reconstruction))
+    RMSE = np.sqrt(np.mean((data-reconstruction)**2))
+    MAE = np.mean(np.abs(data-reconstruction))
     print('maxerror_observed',maxerror_observed)
-    assert maxerror_observed <= maxerror
+    assert maxerror_observed <= maxerror_original
+    print('RMSE:',RMSE)
+    print('MAE:',MAE)
     print('Length of time series: ', len(data))
     print('Size of compressed file: ',os.path.getsize(args.outfile), 'bytes')
     print('Reconstruction written to: ',reconfile)
+    shutil.rmtree(tmpdir)
+    os.remove(tar_archive_name)
 elif args.mode == 'd':
-    tmpfile = args.infile+'.tmp'
-    # extract 7z archive
-    dirname = os.path.dirname(args.infile)
-    if dirname == '':
-        dirname = '.'
-    subprocess.run(['7z','e','-o'+dirname,args.infile])
-    f_in = open(tmpfile,'rb')
+    tar_archive_name = args.outfile+'tmp.tar'
+    tmpdir = args.outfile+'.tmp.dir/'
+    os.makedirs(tmpdir, exist_ok = True)
+    # perform BSC decompression
+    subprocess.run([BSC_PATH,'d',args.infile,tar_archive_name])
+    # untar
+    with tarfile.open(tar_archive_name, "r:") as tar_handle:
+        tar_handle.extractall(tmpdir)
+    tmpfile_params = tmpdir+'params'
+    tmpfile_bin_idx = tmpdir+'bin_idx'
+    tmpfile_float = tmpdir+'float'
+    f_in_params = open(tmpfile_params,'rb')
+    f_in_bin_idx = open(tmpfile_bin_idx,'rb')
+    f_in_float = open(tmpfile_float,'rb')
     # read max error from file
-    maxerror = np.float32(struct.unpack('f',f_in.read(4))[0])
+    maxerror = np.float32(struct.unpack('f',f_in_params.read(4))[0])
     # read length of data
-    len_data = struct.unpack('I',f_in.read(4))[0]
+    len_data = struct.unpack('I',f_in_params.read(4))[0]
     # read flag indicating if model update is used
-    model_update_flag = bool(struct.unpack('?',f_in.read(1))[0])
+    model_update_flag = bool(struct.unpack('?',f_in_params.read(1))[0])
+    # read quantization_bytes from file
+    quantization_bytes = struct.unpack('B',f_in_params.read(1))[0]
+    if quantization_bytes == 1:
+        fmtstring = 'b' # 8 bit signed
+        bin_idx_len = 1 # in bytes
+        max_bin_idx = 127
+        min_bin_idx = -127
+    elif quantization_bytes == 2:
+        fmtstring = 'h' # 16 bit signed
+        bin_idx_len = 2 # in bytes
+        max_bin_idx = 32767
+        min_bin_idx = -32767
+    else:
+        raise RuntimeError("Invalid value of quantization_bytes encountered")
+
     # if model update is used, read the associated parameters
     if model_update_flag:
         model_update_period = struct.unpack('I',f_in.read(4))[0]
@@ -199,17 +263,7 @@ elif args.mode == 'd':
         num_epochs = struct.unpack('I',f_in.read(4))[0]
         optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=lr)
         model.compile(optimizer=optimizer, loss='mse')
-#       K.set_value(model.optimizer.lr, lr)
-    # initialize quantization (with 65535 bins)
-    maxlevel = np.float32(65000*maxerror)
-    minlevel = np.float32(-65000*maxerror)
-    # 65000 to avoid issues with floating point precision and make sure that error is below maxerror
-    numbins = 65535
-    bins = np.linspace(minlevel,maxlevel,numbins,dtype=np.float32)
-    assert np.max(np.diff(bins)) <= 2*maxerror
-    assert np.min(np.abs(bins)) == 0.0
-    fmtstring = 'H' # 16 bit unsigned
-    bin_idx_len = 2 # in bytes
+    
     reconstruction = np.zeros(len_data,dtype=np.float32)
     for i in tqdm(range(len_data)):
         if i <= window_size:
@@ -222,14 +276,15 @@ elif args.mode == 'd':
                     Y_train = Y_train-np.reshape(X_train[:,-1],np.shape(Y_train))
                     model.fit(X_train, Y_train, epochs=num_epochs, verbose=0)
             predval = reconstruction[i-1] + np.float32(model.predict(np.reshape(reconstruction[i-window_size-1:i-1],(1,-1)))[0][0])
-        bin_idx = struct.unpack(fmtstring,f_in.read(bin_idx_len))[0]
-        if bin_idx == numbins:
-            reconstruction[i] = np.float32(struct.unpack('f',f_in.read(4))[0])
+        bin_idx = struct.unpack(fmtstring,f_in_bin_idx.read(bin_idx_len))[0]
+        if bin_idx == min_bin_idx-1:
+            reconstruction[i] = np.float32(struct.unpack('f',f_in_float.read(4))[0])
         else:
-            reconstruction[i] = predval + bins[bin_idx]
-    os.remove(tmpfile)
+            reconstruction[i] = predval + np.float32(2*maxerror*bin_idx)
     # save reconstruction to a file 
     np.save(args.outfile,reconstruction)
+    shutil.rmtree(tmpdir)
+    os.remove(tar_archive_name)
     print('Length of time series: ', len_data)
 else:
     raise RuntimeError('invalid mode (c and d are the only valid modes)')
