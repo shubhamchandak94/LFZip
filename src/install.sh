@@ -18,3 +18,5 @@ conda install \
       six \
       theano
 pip install padasip sklearn keras
+#libbsc for read_seq compression
+(cd libbsc && make)
