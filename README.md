@@ -8,7 +8,6 @@ git clone -b floating_lossy https://github.com/shubhamchandak94/DeepZip.git
 ```
 To set up virtual environment and dependencies:
 ```
-sudo apt-get install p7zip-full
 cd DeepZip/src/
 python3 -m venv env
 source env/bin/activate
@@ -17,7 +16,6 @@ source env/bin/activate
 
 For processors without AVX instructions (e.g., Intel Pentium/Celeron) used in the latest Tensorflow package, do the following instead:
 ```
-sudo apt-get install p7zip-full
 cd DeepZip/src/
 conda create --name no_avx_env python=3.6
 conda activate no_avx_env
