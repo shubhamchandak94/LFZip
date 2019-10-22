@@ -13,18 +13,20 @@ import shutil
 BSC_PATH = os.path.dirname(os.path.realpath(__file__))+'/libbsc/bsc'
 
 class NLMS_predictor:        
-    def __init__(self, n, mu, nseries):
-        self.filt = pa.filters.FilterNLMS(n*nseries, mu=mu,w="zeros")
+    def __init__(self, n, mu, nseries, j):
+        self.filt = pa.filters.FilterNLMS(n*nseries+j, mu=mu,w="zeros")
         self.n = n
+        self.nseries = nseries
+        self.j = j
         return
-    def predict(self,past,idx,j):
-        if idx == 0:
-            return 0
-        elif(idx<=self.n):
-            return past[j][idx-1]
+    def predict(self, past, idx):
+        if idx > self.n:
+            self.filt.adapt(past[self.j + self.nseries*(idx-1)], past[self.nseries*(idx-self.n-1):self.j + self.nseries*(idx-1)])
+            return self.filt.predict(past[self.nseries*(idx-self.n):self.j+self.nseries*idx])
+        elif 0 < idx <= self.n:
+            return past[self.j + self.nseries*(idx-1)]
         else:
-            self.filt.adapt(past[j][idx-1],np.reshape(past[:,idx-self.n-1:idx-1],(-1)))
-            return self.filt.predict(np.reshape(past[:,idx-self.n:idx],(-1)))
+            return 0
 
 parser = argparse.ArgumentParser(description='Input')
 parser.add_argument('--mode','-m', action='store', dest='mode',
@@ -113,7 +115,7 @@ if args.mode == 'c':
             min_bin_idx.append(-32767)
         # initialize predictors 
         mu[j] = np.float32(mu[j])
-        predictor.append(NLMS_predictor(n_NLMS[j], mu[j], nseries))
+        predictor.append(NLMS_predictor(n_NLMS[j], mu[j], nseries, j))
         # write max error to file (needed during decompression)
         f_out_params.write(struct.pack('f',maxerror[j]))
         # write n to file
@@ -125,26 +127,22 @@ if args.mode == 'c':
         f_out_bin_idx.append(open(tmpfile_bin_idx[j],'wb'))
         f_out_float.append(open(tmpfile_float[j],'wb'))
 
-    reconstruction = np.zeros(np.shape(data),dtype=np.float32)
-
+    # flattened reconstruction array to speed up processing
+    reconstruction = np.zeros(np.size(data),dtype=np.float32)
     for i in tqdm(range(data.shape[1])):
         for j in range(nseries):
-            predval = np.float32(predictor[j].predict(reconstruction,i,j))
+            predval = np.float32(predictor[j].predict(reconstruction,i))
             diff = np.float32(data[j][i] - predval)
             bin_idx = int(round(diff/(2*maxerror[j])))
-            if bin_idx > max_bin_idx[j] or bin_idx < min_bin_idx[j]:
-                f_out_bin_idx[j].write(struct.pack(fmtstring[j],min_bin_idx[j]-1))
-                f_out_float[j].write(struct.pack('f',data[j][i]))
-                reconstruction[j][i] = data[j][i]
-            else:
-                reconstruction[j][i] = predval + np.float32(bin_idx*2*maxerror[j])
+            if min_bin_idx[j] <= bin_idx <= max_bin_idx[j]:
+                reconstruction[j+nseries*i] = predval + np.float32(bin_idx*2*maxerror[j])
                 # check if numeric precision issues present, if yes, just store original data as it is
-                if np.abs(reconstruction[j][i]-data[j][i]) > maxerror_original[j]:
-                    f_out_bin_idx[j].write(struct.pack(fmtstring[j],min_bin_idx[j]-1))
-                    f_out_float[j].write(struct.pack('f',data[j][i]))
-                    reconstruction[j][i] = data[j][i]
-                else:
+                if np.abs(reconstruction[j+nseries*i]-data[j][i]) <= maxerror_original[j]:
                     f_out_bin_idx[j].write(struct.pack(fmtstring[j],bin_idx))
+                    continue
+            f_out_bin_idx[j].write(struct.pack(fmtstring[j],min_bin_idx[j]-1))
+            f_out_float[j].write(struct.pack('f',data[j][i]))
+            reconstruction[j+nseries*i] = data[j][i]
     f_out_params.close()
     for j in range(nseries):
         f_out_bin_idx[j].close()
@@ -158,6 +156,7 @@ if args.mode == 'c':
             tar_handle.add(tmpfile_float[j],arcname=os.path.basename(tmpfile_float[j]))
     # apply BSC compression
     subprocess.run([BSC_PATH,'e',tar_archive_name,args.outfile,'-b64p','-e2'])
+    reconstruction = np.reshape(reconstruction, (nseries,-1),order='F')
     # save reconstruction to a file (for comparing later)
     np.save(reconfile,reconstruction)
     # compute the maximum error b/w reconstrution and data and check that it is within maxerror
@@ -229,17 +228,19 @@ elif args.mode == 'd':
         else:
             raise RuntimeError("Invalid value of quantization_bytes encountered")
         # initialize predictor
-        predictor.append(NLMS_predictor(n_nlms[j], mu_nlms[j], nseries))
+        predictor.append(NLMS_predictor(n_nlms[j], mu_nlms[j], nseries,j))
 
-    reconstruction = np.zeros((nseries,len_data),dtype=np.float32)
+    # flattened reconstruction array to speed up processing
+    reconstruction = np.zeros(nseries*len_data,dtype=np.float32)
     for i in tqdm(range(len_data)):
         for j in range(nseries):
-            predval = np.float32(predictor[j].predict(reconstruction,i,j))
+            predval = np.float32(predictor[j].predict(reconstruction,i))
             bin_idx = struct.unpack(fmtstring[j],f_in_bin_idx[j].read(bin_idx_len[j]))[0]
             if bin_idx == min_bin_idx[j]-1:
-                reconstruction[j][i] = np.float32(struct.unpack('f',f_in_float[j].read(4))[0])
+                reconstruction[j+nseries*i] = np.float32(struct.unpack('f',f_in_float[j].read(4))[0])
             else:
-                reconstruction[j][i] = predval + np.float32(2*maxerror[j]*bin_idx)
+                reconstruction[j+nseries*i] = predval + np.float32(2*maxerror[j]*bin_idx)
+    reconstruction = np.reshape(reconstruction,(nseries,-1),order='F')
     # save reconstruction to a file 
     np.save(args.outfile,reconstruction)
     print('Shape of time series:', np.shape(reconstruction))

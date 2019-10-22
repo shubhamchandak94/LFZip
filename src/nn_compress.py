@@ -165,9 +165,7 @@ if args.mode == 'c':
         f_out_params.write(struct.pack('f',lr))
         f_out_params.write(struct.pack('I',num_epochs))
     for i in tqdm(range(len(data))):
-        if i <= window_size:
-            predval = np.float32(0.0)
-        else:
+        if i > window_size:
             if model_update_flag:
                 if i%model_update_period == 0:
                     X_train, Y_train = generate_data(reconstruction[i-model_update_period:i-1], window_size)
@@ -175,21 +173,20 @@ if args.mode == 'c':
                     Y_train = Y_train-np.reshape(X_train[:,-1],np.shape(Y_train))
                     model.fit(X_train, Y_train, epochs=num_epochs, verbose=0)
             predval = reconstruction[i-1] + np.float32(model.predict(np.reshape(reconstruction[i-window_size-1:i-1],(1,-1)))[0][0])
+        else:
+            predval = np.float32(0.0)
+
         diff = np.float32(data[i] - predval)
         bin_idx = int(round(diff/(2*maxerror)))
-        if bin_idx > max_bin_idx or bin_idx < min_bin_idx:
-            f_out_bin_idx.write(struct.pack(fmtstring,min_bin_idx-1))
-            f_out_float.write(struct.pack('f',data[i]))
-            reconstruction[i] = data[i]
-        else:
+        if min_bin_idx <= bin_idx <= max_bin_idx:
             reconstruction[i] = predval + np.float32(bin_idx*2*maxerror)
             # check if numeric precision issues present, if yes, just store original data as it is
-            if np.abs(reconstruction[i]-data[i]) > maxerror_original:
-                f_out_bin_idx.write(struct.pack(fmtstring,min_bin_idx-1))
-                f_out_float.write(struct.pack('f',data[i]))
-                reconstruction[i] = data[i]
-            else:
+            if np.abs(reconstruction[i]-data[i]) <= maxerror_original:
                 f_out_bin_idx.write(struct.pack(fmtstring,bin_idx))
+                continue
+        f_out_bin_idx.write(struct.pack(fmtstring,min_bin_idx-1))
+        f_out_float.write(struct.pack('f',data[i]))
+        reconstruction[i] = data[i]
     f_out_params.close()
     f_out_bin_idx.close()
     f_out_float.close()
@@ -266,9 +263,7 @@ elif args.mode == 'd':
     
     reconstruction = np.zeros(len_data,dtype=np.float32)
     for i in tqdm(range(len_data)):
-        if i <= window_size:
-            predval = np.float32(0.0)
-        else:
+        if i > window_size:
             if model_update_flag:
                 if i%model_update_period == 0:
                     X_train, Y_train = generate_data(reconstruction[i-model_update_period:i-1], window_size)
@@ -276,6 +271,8 @@ elif args.mode == 'd':
                     Y_train = Y_train-np.reshape(X_train[:,-1],np.shape(Y_train))
                     model.fit(X_train, Y_train, epochs=num_epochs, verbose=0)
             predval = reconstruction[i-1] + np.float32(model.predict(np.reshape(reconstruction[i-window_size-1:i-1],(1,-1)))[0][0])
+        else:
+            predval = np.float32(0.0)
         bin_idx = struct.unpack(fmtstring,f_in_bin_idx.read(bin_idx_len))[0]
         if bin_idx == min_bin_idx-1:
             reconstruction[i] = np.float32(struct.unpack('f',f_in_float.read(4))[0])
