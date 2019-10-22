@@ -22,7 +22,7 @@ conda activate no_avx_env
 ./install_without_avx.sh
 ```
 ### NLMS model
-#### Compression:
+#### Compression/Decompression:
 ```
 python3 nlms_compress.py [-h] --mode MODE --infile INFILE --outfile OUTFILE
                         [--NLMS_order N [N ...]] [--mu MU [MU ...]]
@@ -68,7 +68,7 @@ lr:           (float) learning rate (default 1e-3 for Adam)
 noise:        (float) noise added to input during training (uniform[-noise,noise]), default 0
 epochs:       (int) number of epochs to train (0 means store random model)
 ```
-#### Compression 
+#### Compression/Decompression:
 ```
 CUDA_VISIBLE_DEVICES="" PYTHONHASHSEED=0 python3 nn_compress.py [-h] --mode MODE --infile INFILE --outfile OUTFILE
                       [--absolute_error MAXERROR] --model_file MODEL_FILE
@@ -100,7 +100,27 @@ with the parameters:
 ```
 The `CUDA_VISIBLE_DEVICES="" PYTHONHASHSEED=0` environment variables are set to ensure that the decompression works precisely the same as the compression and generates the correct reconstruction.
 
+### Critical aperture compression
+
+#### Compression/Decompression:
+```
+python3 ca_compress.py [-h] --mode MODE --infile INFILE --outfile OUTFILE
+                      [--absolute_error MAXERROR]
+
+Input
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --mode MODE, -m MODE  c or d (compress/decompress)
+  --infile INFILE, -i INFILE
+                        infile .npy/.bsc
+  --outfile OUTFILE, -o OUTFILE
+                        outfile .bsc/.npy
+  --absolute_error MAXERROR, -a MAXERROR
+                        max allowed error for compression
+```
+
 ### Other helpful scripts
-`data/dat_to_np.py`: convert a .dat file (with 1 time series value in plaintext per line) to .npy file
-`data/npy_to_bin.py`: convert a .npy file to binary file used as input to SZ
-`data/bin_to_npy.py`: convert a .bin file to .npy file
+- `data/dat_to_np.py`: convert a .dat file (with 1 time series value in plaintext per line) to .npy file
+- `data/npy_to_bin.py`: convert a .npy file to binary file used as input to SZ
+- `data/bin_to_npy.py`: convert a .bin file to .npy file
