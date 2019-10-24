@@ -33,7 +33,7 @@ parser.add_argument('--mode','-m', action='store', dest='mode',
                     help='c or d (compress/decompress)', required=True)
 parser.add_argument('--infile','-i', action='store', dest='infile', help = 'infile .npy/.bsc', type = str, required=True)
 parser.add_argument('--outfile','-o', action='store', dest='outfile', help = 'outfile .bsc/.npy', type = str, required=True)
-parser.add_argument('--NLMS_order','-n', action='store', nargs = '+', dest='n', help = 'order of NLMS filter for compression (default 4) - single value or one per time series', type = int, default = [4])
+parser.add_argument('--NLMS_order','-n', action='store', nargs = '+', dest='n', help = 'order of NLMS filter for compression (default 4) - single value or one per time series', type = int, default = [32])
 parser.add_argument('--mu', action='store', nargs = '+', dest='mu', help = 'learning rate of NLMS for compression (default 0.5) - single value or one per time series', type = float, default = [0.5])
 parser.add_argument('--absolute_error','-a', action='store', nargs='+', dest='maxerror', help = 'max allowed error for compression - single value or one per time series', type=float)
 parser.add_argument('--quantization_bytes','-q', action='store', nargs='+', dest='quantization_bytes', help = 'number of bytes used to encode quantized error - decides number of quantization levels. Valid values are 1, 2 (default: 2) - single value or one per time series', type=int, default = [2])

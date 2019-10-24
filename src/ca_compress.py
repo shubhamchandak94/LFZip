@@ -21,7 +21,7 @@ def interpolate(diff_X, Y):
         curr_X += diff_X[i-1]
         recon[curr_X] = Y[i]
         for j in range(prev_X+1,curr_X):
-            recon[j] = recon[prev_X] + (recon[curr_X]-recon[prev_X])*np.float32(j-prev_X)/np.float32(curr_X-prev_X)
+            recon[j] = recon[prev_X] + ((recon[curr_X]-recon[prev_X])/np.float32(curr_X-prev_X))*np.float32(j-prev_X)
     return recon
 
 parser = argparse.ArgumentParser(description='Input')
@@ -49,7 +49,6 @@ if args.mode == 'c':
     assert maxerror_original > np.finfo(np.float32).resolution
     # reduce maxerror a little bit to make sure that we don't run into numeric precision issues
     maxerror = maxerror_original - np.finfo(np.float32).resolution
-
     tmpdir = args.outfile+'.tmp.dir/'
     os.makedirs(tmpdir, exist_ok = True)
     tmpfile_X = tmpdir + 'X'
@@ -79,7 +78,6 @@ if args.mode == 'c':
             archived_idx = held_idx
             upper_slope = np.float32(np.inf)
             lower_slope = np.float32(-np.inf)
-    
     # write to file
     X = np.array(X, dtype=np.uint32)
     diff_X = np.diff(X)
@@ -109,11 +107,11 @@ if args.mode == 'c':
     print('maxerror_observed:',maxerror_observed)
     print('RMSE:',RMSE)
     print('MAE:',MAE)
-    assert maxerror_observed <= maxerror_original
     print('Length of time series:', len(data))
     print('Number of points retained:', len(Y))
     print('Size of compressed file:',os.path.getsize(args.outfile), 'bytes')
     print('Reconstruction written to:',reconfile)
+    assert maxerror_observed <= maxerror_original
     shutil.rmtree(tmpdir)
     os.remove(tar_archive_name)
 elif args.mode == 'd':

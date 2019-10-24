@@ -18,13 +18,13 @@ import os
 from keras.callbacks import CSVLogger
 from keras import backend as K
 
-# models for Siemens floating point data compression
-def FC_siemens_0hiddenlayers(input_dim,hidden_layer_size):
-    model = Sequential()
-    model.add(Dense(1,input_dim=input_dim))
-    return model
+# models for floating point data compression
 
-def FC_siemens(input_dim,num_hidden_layers,hidden_layer_size):
+def FC(input_dim,num_hidden_layers,hidden_layer_size):
+    if num_hidden_layers == 0:
+        model = Sequential()
+        model.add(Dense(1,input_dim=input_dim))
+        return model
     assert num_hidden_layers > 0
     model = Sequential()
     model.add(Dense(hidden_layer_size, activation='relu',input_dim=input_dim))
@@ -35,7 +35,7 @@ def FC_siemens(input_dim,num_hidden_layers,hidden_layer_size):
     model.add(Dense(1))
     return model
 
-def biGRU_siemens(input_dim, num_biGRU_layers, num_units_biGRU, num_units_dense):
+def biGRU(input_dim, num_biGRU_layers, num_units_biGRU, num_units_dense):
         assert num_biGRU_layers > 0
         model = Sequential()
         model.add(Reshape((input_dim, 1), input_shape=(input_dim,)))
