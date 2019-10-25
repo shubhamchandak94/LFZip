@@ -101,7 +101,7 @@ with the parameters:
 The `CUDA_VISIBLE_DEVICES="" PYTHONHASHSEED=0` environment variables are set to ensure that the decompression works precisely the same as the compression and generates the correct reconstruction.
 
 ### Critical aperture compression
-
+WARNING: in some cases, maxerror constraint can be slightly violated (~1e-5) due to numerical precision issues.
 #### Compression/Decompression:
 ```
 python3 ca_compress.py [-h] --mode MODE --infile INFILE --outfile OUTFILE
