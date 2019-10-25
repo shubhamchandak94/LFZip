@@ -3,7 +3,7 @@ pip install \
     tensorflow==1.15 \
     tensorflow-gpu==1.15 \
     tqdm
-conda install \
+pip install \
       h5py \
       matplotlib \
       mkl \
@@ -12,11 +12,13 @@ conda install \
       Pillow \
       pandas \
       pydot \
-      pygpu \
       pyyaml \
+      numpy \
+      scipy \
       scikit-learn \
       six \
-      theano
-pip install padasip sklearn keras
-#libbsc for read_seq compression
+      theano \
+      padasip \
+      keras
+#libbsc for entropy coding
 (cd libbsc && make)
