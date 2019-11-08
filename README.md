@@ -1,6 +1,9 @@
 # LFZip
 
 ## Multivariate floating-point time series lossy compression under maximum error distortion
+
+#### Arxiv: https://arxiv.org/abs/1911.00208
+
 ### Download and install dependencies
 Download:
 ```
