@@ -9,12 +9,22 @@ Download:
 ```
 git clone https://github.com/shubhamchandak94/LFZip.git
 ```
-To set up virtual environment and dependencies:
+To set up virtual environment and dependencies (on Linux):
 ```
 cd LFZip/src/
 python3 -m venv env
 source env/bin/activate
 ./install.sh
+```
+
+On macOS, you need gcc compiler for running BSC which is the entropy coder used in LFZip. For this, install gcc@9 using brew as follows:
+```
+brew update
+brew install gcc@9
+```
+and then replace the last statement of the Linux instructions with
+```
+./install_macos.sh
 ```
 
 For processors without AVX instructions (e.g., Intel Pentium/Celeron) used in the latest Tensorflow package, do the following instead (requires a working conda installation):
