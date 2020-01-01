@@ -1,9 +1,9 @@
-pip install -q --upgrade pip
-pip install -q \
+pip install --upgrade pip
+pip install \
     tensorflow==1.15 \
     tensorflow-gpu==1.15
-pip install -q tqdm
-pip install -q \
+pip install tqdm
+pip install \
       h5py \
       matplotlib \
       mkl \
