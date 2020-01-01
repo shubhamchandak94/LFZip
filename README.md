@@ -2,6 +2,8 @@
 
 ## Multivariate floating-point time series lossy compression under maximum error distortion
 
+[![Build Status](https://travis-ci.org/shubhamchandak94/LFZip.svg?branch=master)](https://travis-ci.org/shubhamchandak94/LFZip)
+
 #### Arxiv: https://arxiv.org/abs/1911.00208
 
 ### Download and install dependencies
