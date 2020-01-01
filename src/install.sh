@@ -1,9 +1,10 @@
-pip install --upgrade pip
-pip install \
+pip install -q --upgrade pip
+pip install -q --upgrade setuptools
+pip install -q \
     tensorflow==1.15 \
     tensorflow-gpu==1.15
-pip install tqdm
-pip install \
+pip install -q tqdm
+pip install -q \
       h5py \
       matplotlib \
       mkl \
@@ -23,4 +24,4 @@ pip install \
 # libbsc for entropy coding
 (cd libbsc && make)
 # compile nlms_helper for actual compression with nlms
-g++ nlms_helper.py -std=c++11 -o nlms_helper.out -Wall -O3 -march=native
+g++ nlms_helper.cpp -std=c++11 -o nlms_helper.out -Wall -O3 -march=native
