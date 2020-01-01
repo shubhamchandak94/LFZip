@@ -36,8 +36,8 @@ conda activate no_avx_env
 ```
 
 ### General comments
-- Note that LFZip (NLMS), LFZip (NN) and CA (critical aperture) expect the input to be in numpy array (.npy) format and support only float32 arrays. 
-- LFZip (NLMS) additionally supports multivariate time series with at most 256 variables, where the input is a numpy array of shape `(k,T)` where `k` is the number of variables and `T` is the length of the time series. 
+- Note that LFZip (NLMS), LFZip (NN) and CA (critical aperture) expect the input to be in numpy array (.npy) format and support only float32 arrays.
+- LFZip (NLMS) additionally supports multivariate time series with at most 256 variables, where the input is a numpy array of shape `(k,T)` where `k` is the number of variables and `T` is the length of the time series.
 - During compression, the reconstructed time series is also generated as a byproduct and stored as `compressed_file.bsc.recon.npy`. This can be used to verify the correctness of the compression-decompression pipeline.
 
 ### LFZip (NLMS)
@@ -48,7 +48,7 @@ python3 nlms_compress.py [-h] --mode MODE --infile INFILE --outfile OUTFILE
                         [--absolute_error MAXERROR [MAXERROR ...]]
                         [--quantization_bytes QUANTIZATION_BYTES [QUANTIZATION_BYTES ...]]
 ```
-with the parameters: 
+with the parameters:
 ```
   -h, --help            show this help message and exit
   --mode MODE, -m MODE  c or d (compress/decompress)
@@ -69,7 +69,8 @@ with the parameters:
                         decides number of quantization levels. Valid values
                         are 1, 2 (default: 2) - single value or one per variable
 ```
-
+Note that `nlms_compress_python.py` is an older and slower version with a similar interface
+but with the core NLMS compression code written in Python instead of C++.
 ### LFZip (NN)
 #### Training a model
 First select the appropriate function from `models.py`, e.g., `FC` or `biGRU`. Then call
@@ -160,13 +161,13 @@ cmp nanopore_test.decompressed.npy nanopore_test_compressed.bsc.recon.npy
 ```
 
 #### LFZip (NN)
-Training a fully connected model (`FC` in `models.py`) with `input_dim = 32`, `num_hidden_layers = 4`, `hidden_layer_size = 128` for 5 epochs with uniform noise in \[-0.05,0.05\] added to the input. 
+Training a fully connected model (`FC` in `models.py`) with `input_dim = 32`, `num_hidden_layers = 4`, `hidden_layer_size = 128` for 5 epochs with uniform noise in \[-0.05,0.05\] added to the input.
 ```
 python nn_trainer.py -train ../data/evaluation_datasets/dna/nanopore_train.npy -val ../data/evaluation_datasets/dna/nanopore_val.npy -model_name FC -model_params 32 4 128 -model_file nanopore_trained.h5 -noise 0.05 -epochs 5
 ```
 Compression:
 ```
-CUDA_VISIBLE_DEVICES="" PYTHONHASHSEED=0 python nn_compress.py -m c -i ../data/evaluation_datasets/dna/nanopore_test.npy -o nanopore_test.bsc -a 0.01 --model_file nanopore_trained.h5 
+CUDA_VISIBLE_DEVICES="" PYTHONHASHSEED=0 python nn_compress.py -m c -i ../data/evaluation_datasets/dna/nanopore_test.npy -o nanopore_test.bsc -a 0.01 --model_file nanopore_trained.h5
 ```
 Decompression:
 ```

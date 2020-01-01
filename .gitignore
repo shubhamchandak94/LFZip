@@ -7,3 +7,4 @@ data/processed_files_new/*
 data/fasta_files/*
 data/compressed/*
 data/siemens_data/*
+src/env/

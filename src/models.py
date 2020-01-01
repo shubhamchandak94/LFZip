@@ -19,7 +19,7 @@ from keras.callbacks import CSVLogger
 from keras import backend as K
 
 # models for floating point data compression
-
+# new models can be added as functions here
 # note that the first parameter to any function should be the input_dim
 
 def FC(input_dim,num_hidden_layers,hidden_layer_size):

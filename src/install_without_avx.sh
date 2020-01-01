@@ -18,3 +18,7 @@ conda install \
       six \
       theano
 pip install padasip sklearn keras==2.1.5
+#libbsc for entropy coding
+(cd libbsc && make CC=g++-9)
+# compile nlms_helper for actual compression with nlms
+g++ nlms_helper.py -std=c++11 -o nlms_helper.out -Wall -O3 -march=native

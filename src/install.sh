@@ -20,5 +20,7 @@ pip install \
       theano \
       padasip \
       keras
-#libbsc for entropy coding
+# libbsc for entropy coding
 (cd libbsc && make)
+# compile nlms_helper for actual compression with nlms
+g++ nlms_helper.py -std=c++11 -o nlms_helper.out -Wall -O3 -march=native
