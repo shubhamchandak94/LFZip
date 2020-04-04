@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # call with PYTHONHASHSEED=0 to ensure determinism
 import struct
 import os
@@ -8,6 +9,9 @@ import tarfile
 import shutil
 
 BSC_PATH = os.path.dirname(os.path.realpath(__file__))+'/libbsc/bsc'
+if not os.path.exists(BSC_PATH):
+    BSC_PATH = 'bsc'
+
 NLMS_PATH = os.path.dirname(os.path.realpath(__file__))+'/nlms_helper.out'
 
 parser = argparse.ArgumentParser(description='Input')
