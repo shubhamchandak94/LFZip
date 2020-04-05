@@ -9,12 +9,12 @@
 ### Download and install dependencies
 
 #### Using Conda (Linux/MacOSX): 
-LFZip (NLMS prediction mode) is now available on conda through the conda-forge channel. For the neural network prediction mode or to run from source, see next section.
+LFZip (NLMS prediction mode) is now available on conda through the conda-forge channel. For the neural network prediction mode or to run from source, see the next section.
 ```
 conda config --add channels conda-forge
 conda install lfzip
 ```
-To install in a conda virtual environment, follow the instructions [here](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#creating-an-environment-with-commands).
+After the installation, LFZip (NLMS) can be run using the command `lfzip-nlms`. To install LFZip in a conda virtual environment, follow the instructions [here](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#creating-an-environment-with-commands).
 
 #### From source (Linux/MacOSX):
 Download:
