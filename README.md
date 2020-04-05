@@ -7,6 +7,16 @@
 #### Arxiv: https://arxiv.org/abs/1911.00208
 
 ### Download and install dependencies
+
+#### Using Conda (Linux/MacOSX): 
+LFZip (NLMS prediction mode) is now available on conda through the conda-forge channel. For the neural network prediction mode or to run from source, see next section.
+```
+conda config --add channels conda-forge
+conda install lfzip
+```
+To install in a conda virtual environment, follow the instructions [here](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#creating-an-environment-with-commands).
+
+#### From source (Linux/MacOSX):
 Download:
 ```
 git clone https://github.com/shubhamchandak94/LFZip.git
@@ -44,6 +54,7 @@ conda activate no_avx_env
 
 ### LFZip (NLMS)
 #### Compression/Decompression:
+If installed using conda, replace `python3 nlms_compress.py` by `lfzip-nlms`.
 ```
 python3 nlms_compress.py [-h] --mode MODE --infile INFILE --outfile OUTFILE
                         [--NLMS_order N [N ...]] [--mu MU [MU ...]]
@@ -149,6 +160,8 @@ optional arguments:
 ### Examples
 
 #### LFZip (NLMS)
+If installed using conda, replace `python nlms_compress.py` by `lfzip-nlms`.
+
 Compression:
 ```
 python nlms_compress.py -m c -i ../data/evaluation_datasets/dna/nanopore_test.npy -o nanopore_test_compressed.bsc -a 0.01
