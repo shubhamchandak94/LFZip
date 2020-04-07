@@ -1,8 +1,7 @@
 pip install -q --upgrade pip
 pip install -q --upgrade setuptools
-pip install -q \
-    tensorflow==1.15 \
-    tensorflow-gpu==1.15
+pip install -q tensorflow==1.15
+pip install -q tensorflow-gpu==1.15
 pip install -q tqdm
 pip install -q \
       h5py \

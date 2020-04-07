@@ -182,11 +182,11 @@ python nn_trainer.py -train ../data/evaluation_datasets/dna/nanopore_train.npy -
 ```
 Compression:
 ```
-CUDA_VISIBLE_DEVICES="" PYTHONHASHSEED=0 python nn_compress.py -m c -i ../data/evaluation_datasets/dna/nanopore_test.npy -o nanopore_test.bsc -a 0.01 --model_file nanopore_trained.h5
+CUDA_VISIBLE_DEVICES="" PYTHONHASHSEED=0 python nn_compress.py -m c -i ../data/evaluation_datasets/dna/nanopore_test.npy -o nanopore_test_compressed.bsc -a 0.01 --model_file nanopore_trained.h5
 ```
 Decompression:
 ```
-CUDA_VISIBLE_DEVICES="" PYTHONHASHSEED=0 python nn_compress.py -m d -i nanopore_test.bsc -o nanopore_test.decompressed.npy --model_file nanopore_trained.h5
+CUDA_VISIBLE_DEVICES="" PYTHONHASHSEED=0 python nn_compress.py -m d -i nanopore_test_compressed.bsc -o nanopore_test.decompressed.npy --model_file nanopore_trained.h5
 ```
 Verification:
 ```
