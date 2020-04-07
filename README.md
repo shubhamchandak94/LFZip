@@ -51,7 +51,7 @@ conda activate no_avx_env
 - Note that LFZip (NLMS), LFZip (NN) and CA (critical aperture) expect the input to be in numpy array (.npy) format and support only float32 arrays.
 - LFZip (NLMS) additionally supports multivariate time series with at most 256 variables, where the input is a numpy array of shape `(k,T)` where `k` is the number of variables and `T` is the length of the time series.
 - During compression, the reconstructed time series is also generated as a byproduct and stored as `compressed_file.bsc.recon.npy`. This can be used to verify the correctness of the compression-decompression pipeline.
-- **Examples** are shown below the usages below [[link](#examples)].
+- **Examples** are shown after the usages below [[link](#examples)].
 
 ### LFZip (NLMS)
 #### Compression/Decompression:
