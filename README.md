@@ -6,11 +6,15 @@
 
 #### Arxiv: https://arxiv.org/abs/1911.00208
 
+##### See update [below](#update-on-nlms-order) on selecting value of NLMS order for LFZip 
+
 ### Download and install dependencies
 
 #### Using Conda (Linux/MacOSX): 
 LFZip (NLMS prediction mode) is now available on conda through the conda-forge channel. For the neural network prediction mode or to run from source, see the next section.
 ```
+conda create --name lfzip_env
+conda activate lfzip_env
 conda config --add channels conda-forge
 conda install lfzip
 ```
@@ -85,6 +89,10 @@ with the parameters:
 ```
 Note that `nlms_compress_python.py` is an older and slower version with a similar interface
 but with the core NLMS compression code written in Python instead of C++.
+
+##### Update on NLMS order
+While the default order for NLMS is 32, we have found that for certain dataset, the optimal order is 0 (i.e., the prediction step is skipped). We recommend that the user try out both values using the `-n` flag for a given data source before selecting the order. We are currently working on making this process automatic.
+
 ### LFZip (NN)
 #### Training a model
 First select the appropriate function from `models.py`, e.g., `FC` or `biGRU`. Then call
@@ -161,7 +169,7 @@ optional arguments:
 ### Examples
 
 #### LFZip (NLMS)
-If installed using conda, replace `python nlms_compress.py` by `lfzip-nlms`.
+If installed using conda, replace `python nlms_compress.py` by `lfzip-nlms`. See also [update](#update-on-nlms-order) above on selecting the NLMS order.
 
 Compression:
 ```
