@@ -6,6 +6,8 @@
 
 #### Arxiv: https://arxiv.org/abs/1911.00208
 
+#### DCC 2020: https://ieeexplore.ieee.org/document/9105816
+
 ##### See update [below](#update-on-nlms-order) on selecting value of NLMS order for LFZip 
 
 ### Download and install dependencies
