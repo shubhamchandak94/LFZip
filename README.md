@@ -44,6 +44,8 @@ and then replace the last statement of the Linux instructions with
 ```
 ./install_macos.sh
 ```
+If you get an error related to the compilation flags, please look at issue [#6](https://github.com/shubhamchandak94/LFZip/issues/6) which might help you out.
+
 
 For processors without AVX instructions (e.g., Intel Pentium/Celeron) used in the latest Tensorflow package, do the following instead (requires a working conda installation):
 ```
